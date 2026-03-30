@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>websh</title>
+  <title>websh — Lightweight web terminal</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -34,7 +34,8 @@
     .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
     .ov.h{display:none}
     .panel{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:24px 28px;width:460px;max-width:95vw;max-height:90vh;overflow-y:auto}
-    .panel h2{font-size:17px;margin-bottom:16px;font-weight:600}
+    .panel h2{font-size:17px;margin-bottom:4px;font-weight:600}
+    .slogan{font-size:12px;color:var(--dim);margin-bottom:16px}
 
     /* ── Saved connections ── */
     .saved-section{margin-bottom:20px}
@@ -117,6 +118,7 @@
 <div id="ov" class="ov">
   <div class="panel">
     <h2>websh</h2>
+    <div class="slogan">Lightweight web terminal</div>
 
     <!-- Server connections (from config) -->
     <div id="serverSection" class="saved-section h">
@@ -231,11 +233,19 @@ var serverConfig = null; // loaded from /api/config
 // ── UI helpers ───────────────────────────────────────────────────────
 function $(id){ return document.getElementById(id) }
 
+var connLabel = '';
+
+function setTitle(label) {
+  connLabel = label || '';
+  document.title = connLabel ? connLabel + ' \u2014 websh' : 'websh \u2014 Lightweight web terminal';
+}
+
 function setStatus(s) {
   var b = $('badge');
   b.className = 'badge ' + (s === 'connected' ? 's-on' : s === 'connecting' ? 's-wait' : 's-off');
   b.textContent = s.charAt(0).toUpperCase() + s.slice(1);
   $('btnDisc').style.display = s === 'connected' ? '' : 'none';
+  if (s === 'disconnected') setTitle('');
 }
 
 function showOverlay(){ $('ov').classList.remove('h'); focusFirst() }
@@ -316,6 +326,7 @@ function renderSaved() {
 function connectSaved(c) {
   hideErr();
   $('hostLabel').textContent = c.user + '@' + c.host;
+  setTitle(c.name || c.user + '@' + c.host);
   term.reset();
   term.focus();
   setStatus('connecting');
@@ -434,7 +445,9 @@ function doConnect() {
     toggleSaveName();
   }
 
-  $('hostLabel').textContent = username + '@' + host;
+  var label = username + '@' + host;
+  $('hostLabel').textContent = label;
+  setTitle(label);
   term.reset();
   term.focus();
   setStatus('connecting');
@@ -547,6 +560,7 @@ function connectByName(name) {
   if (!c) return;
 
   $('hostLabel').textContent = c.username + '@' + c.host;
+  setTitle(name);
   term.reset();
   term.focus();
   setStatus('connecting');
