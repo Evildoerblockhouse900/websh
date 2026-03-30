@@ -518,7 +518,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "session not found"}, 404)
             return
 
-        ok = session.write(body.get("data", "").encode("latin-1"))
+        ok = session.write(body.get("data", "").encode("utf-8"))
         self._json({"ok": ok, "alive": session.alive})
 
     def _output(self):
