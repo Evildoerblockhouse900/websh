@@ -333,6 +333,67 @@ class TestHTTPApi(unittest.TestCase):
         body, code = self._get("/api/nonexistent")
         self.assertEqual(code, 404)
 
+    def test_disconnect_unknown_session(self):
+        body, code = self._post("/api/disconnect", {"session_id": "fake"})
+        self.assertEqual(code, 200)
+        self.assertTrue(body["ok"])
+
+    def test_input_missing_session(self):
+        body, code = self._post("/api/input", {"session_id": "fake", "data": "x"})
+        self.assertEqual(code, 404)
+
+    def test_resize_missing_session(self):
+        body, code = self._post("/api/resize", {
+            "session_id": "fake", "cols": 80, "rows": 24
+        })
+        self.assertEqual(code, 404)
+
+    def test_input_invalid_json(self):
+        """Malformed request body."""
+        from urllib.request import urlopen, Request
+        url = "http://127.0.0.1:{}/api/input".format(self.port)
+        req = Request(url, data=b"not json",
+                      headers={"Content-Type": "application/json"})
+        try:
+            resp = urlopen(req, timeout=5)
+            body = json.loads(resp.read().decode("utf-8"))
+            code = resp.getcode()
+        except Exception as e:
+            body = json.loads(e.read().decode("utf-8"))
+            code = e.code
+        self.assertEqual(code, 400)
+        self.assertIn("invalid json", body["error"])
+
+    def test_connect_invalid_json(self):
+        from urllib.request import urlopen, Request
+        url = "http://127.0.0.1:{}/api/connect".format(self.port)
+        req = Request(url, data=b"{bad",
+                      headers={"Content-Type": "application/json"})
+        try:
+            resp = urlopen(req, timeout=5)
+            body = json.loads(resp.read().decode("utf-8"))
+            code = resp.getcode()
+        except Exception as e:
+            body = json.loads(e.read().decode("utf-8"))
+            code = e.code
+        self.assertEqual(code, 400)
+
+
+class TestIntEnv(unittest.TestCase):
+
+    def test_valid(self):
+        os.environ["_TEST_INT"] = "42"
+        self.assertEqual(server._int_env("_TEST_INT", "10"), 42)
+        del os.environ["_TEST_INT"]
+
+    def test_invalid(self):
+        os.environ["_TEST_INT"] = "abc"
+        self.assertEqual(server._int_env("_TEST_INT", "10"), 10)
+        del os.environ["_TEST_INT"]
+
+    def test_missing(self):
+        self.assertEqual(server._int_env("_TEST_MISSING_XYZ", "99"), 99)
+
 
 if __name__ == "__main__":
     unittest.main()

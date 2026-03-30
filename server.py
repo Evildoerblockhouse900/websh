@@ -44,10 +44,16 @@ from threading import Thread, Lock
 
 # ─── Configuration ───────────────────────────────────────────────────
 
-PORT = int(os.environ.get("PORT", "8765"))
+def _int_env(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return int(default)
+
+PORT = _int_env("PORT", "8765")
 HOST = os.environ.get("HOST", "127.0.0.1")
-SESSION_TIMEOUT = int(os.environ.get("SESSION_TIMEOUT", "300"))
-MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "10"))
+SESSION_TIMEOUT = _int_env("SESSION_TIMEOUT", "300")
+MAX_SESSIONS = _int_env("MAX_SESSIONS", "10")
 
 # Limits
 MAX_PORT = 65535
@@ -262,7 +268,8 @@ class SSHSession(object):
                     # Auto-type password on prompt
                     if self._password and not self._password_sent:
                         text = data.decode("latin-1", errors="replace").lower()
-                        if "password:" in text or "password for" in text:
+                        if ("password:" in text or "password for" in text
+                                or "passcode:" in text or "passphrase" in text):
                             time.sleep(0.1)
                             try:
                                 os.write(self.master_fd,
@@ -476,7 +483,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "too many active sessions"}, 429)
                 return
 
-        sid = str(uuid.uuid4())[:12]
+        sid = str(uuid.uuid4())
         session = None
         try:
             session = SSHSession(

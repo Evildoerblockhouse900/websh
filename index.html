@@ -365,8 +365,9 @@ function renderSaved() {
 function connectSaved(c) {
   hideErr();
   lastConn = {type: 'saved', data: c};
-  $('hostLabel').textContent = c.user + '@' + c.host;
-  setTitle(c.name || c.user + '@' + c.host);
+  var label = c.name || (c.user + '@' + c.host);
+  $('hostLabel').textContent = label;
+  setTitle(label);
   term.reset();
   term.focus();
   setStatus('connecting');

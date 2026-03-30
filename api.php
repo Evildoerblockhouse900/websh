@@ -21,6 +21,12 @@ if ($proto === 'http' || ($port !== '' && $port !== '443')) {
 @set_time_limit(55);
 while (ob_get_level()) ob_end_clean();
 
+if (!extension_loaded('curl')) {
+    header('HTTP/1.1 500 Internal Server Error');
+    echo '{"error":"PHP curl extension is required"}';
+    exit;
+}
+
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, no-store, must-revalidate');
 
@@ -86,9 +92,15 @@ function ensure_backend($backend, $config_path) {
     // Backend is down — start server.py (with lock to prevent double-start).
     $lock = fopen(sys_get_temp_dir() . '/websh_start.lock', 'c');
     if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
-        // Another process is already starting the backend — wait for it.
+        // Another process is already starting the backend — wait, then retry ping.
         if ($lock) fclose($lock);
         usleep(1500000);
+        $ch = curl_init($backend . '/api/ping');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1);
+        curl_exec($ch);
+        curl_close($ch);
         return;
     }
 
