@@ -90,11 +90,32 @@
     .err.on{display:block}
 
     /* ── Terminal ── */
-    .tw{flex:1;padding:2px;overflow:hidden}
+    .tw{flex:1;padding:2px;overflow:hidden;position:relative}
     #terminal{width:100%;height:100%}
     .xterm-viewport::-webkit-scrollbar{width:8px}
     .xterm-viewport::-webkit-scrollbar-track{background:transparent}
     .xterm-viewport::-webkit-scrollbar-thumb{background:var(--bd);border-radius:4px}
+
+    /* ── Search bar ── */
+    .search-bar{position:absolute;top:4px;right:12px;display:flex;gap:4px;z-index:50;background:var(--sf);border:1px solid var(--bd);border-radius:var(--radius);padding:4px 6px;align-items:center}
+    .search-bar.h{display:none}
+    .search-bar input{background:var(--bg);border:1px solid var(--bd);border-radius:4px;color:var(--tx);padding:3px 8px;font-size:12px;width:200px;outline:none}
+    .search-bar input:focus{border-color:var(--ac)}
+    .search-bar button{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:2px 4px}
+    .search-bar button:hover{color:var(--tx)}
+
+    /* ── Top bar buttons ── */
+    .top-r{display:flex;align-items:center;gap:6px}
+    .tbtn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:15px;padding:4px;border-radius:4px;transition:.15s;line-height:1}
+    .tbtn:hover{color:var(--tx);background:rgba(255,255,255,.06)}
+
+    /* ── Bell flash ── */
+    .tw.bell{animation:bellflash .15s}
+    @keyframes bellflash{0%,100%{box-shadow:none}50%{box-shadow:inset 0 0 0 2px var(--wn)}}
+
+    /* ── Light theme ── */
+    [data-theme="light"]{--bg:#fff;--sf:#f6f8fa;--bd:#d0d7de;--tx:#1f2328;--dim:#656d76;--ac:#0969da;--ach:#0550ae;--dg:#cf222e;--ok:#1a7f37;--wn:#9a6700}
+    [data-theme="light"] .xterm{--xterm-bg:#fff}
   </style>
 </head>
 <body>
@@ -106,13 +127,26 @@
     <span id="badge" class="badge s-off">Disconnected</span>
     <span id="hostLabel" class="host-label"></span>
   </div>
-  <div>
+  <div class="top-r">
+    <button id="btnReconn" class="btn" style="display:none" onclick="doReconnect()">Reconnect</button>
+    <button class="tbtn" onclick="toggleSearch()" title="Search (Ctrl+Shift+F)">&#x1F50D;</button>
+    <button class="tbtn" onclick="zoomIn()" title="Zoom in (Ctrl+Plus)">A+</button>
+    <button class="tbtn" onclick="zoomOut()" title="Zoom out (Ctrl+Minus)">A-</button>
+    <button class="tbtn" onclick="toggleTheme()" title="Toggle theme" id="btnTheme">&#x25D1;</button>
+    <button class="tbtn" onclick="toggleFullscreen()" title="Fullscreen (F11)">&#x26F6;</button>
     <button id="btnDisc" class="btn btn-d" style="display:none" onclick="doDisconnect()">Disconnect</button>
   </div>
 </div>
 
 <!-- Terminal (behind overlay when disconnected) -->
-<div class="tw"><div id="terminal"></div></div>
+<div class="tw" id="tw"><div id="terminal"></div>
+  <div id="searchBar" class="search-bar h">
+    <input id="searchInput" type="text" placeholder="Search...">
+    <button onclick="searchPrev()">&#x25B2;</button>
+    <button onclick="searchNext()">&#x25BC;</button>
+    <button onclick="closeSearch()">&#x2715;</button>
+  </div>
+</div>
 
 <!-- Connect overlay -->
 <div id="ov" class="ov">
@@ -177,6 +211,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js"></script>
 <script>
 // ── API ──────────────────────────────────────────────────────────────
 var API = location.pathname.replace(/\/[^/]*$/, '') + '/api.php';
@@ -214,6 +249,7 @@ term.loadAddon(fitAddon);
 term.loadAddon(new WebLinksAddon.WebLinksAddon());
 var u11 = new Unicode11Addon.Unicode11Addon(); term.loadAddon(u11);
 term.unicode.activeVersion = '11';
+var searchAddon = new SearchAddon.SearchAddon(); term.loadAddon(searchAddon);
 term.open(document.getElementById('terminal'));
 fitAddon.fit();
 window.addEventListener('resize', function(){ fitAddon.fit() });
@@ -229,6 +265,8 @@ var keepaliveTimer = null;
 var pollRetries = 0;
 var MAX_POLL_RETRIES = 5;
 var serverConfig = null; // loaded from /api/config
+var lastConn = null; // for reconnect
+var fontSize = 14;
 
 // ── UI helpers ───────────────────────────────────────────────────────
 function $(id){ return document.getElementById(id) }
@@ -245,6 +283,7 @@ function setStatus(s) {
   b.className = 'badge ' + (s === 'connected' ? 's-on' : s === 'connecting' ? 's-wait' : 's-off');
   b.textContent = s.charAt(0).toUpperCase() + s.slice(1);
   $('btnDisc').style.display = s === 'connected' ? '' : 'none';
+  $('btnReconn').style.display = (s === 'disconnected' && lastConn) ? '' : 'none';
   if (s === 'disconnected') setTitle('');
 }
 
@@ -325,6 +364,7 @@ function renderSaved() {
 
 function connectSaved(c) {
   hideErr();
+  lastConn = {type: 'saved', data: c};
   $('hostLabel').textContent = c.user + '@' + c.host;
   setTitle(c.name || c.user + '@' + c.host);
   term.reset();
@@ -446,6 +486,7 @@ function doConnect() {
     toggleSaveName();
   }
 
+  lastConn = {type: 'manual', data: {host: host, port: port, username: username, password: password, key: key}};
   var label = username + '@' + host;
   $('hostLabel').textContent = label;
   setTitle(label);
@@ -560,6 +601,7 @@ function connectByName(name) {
   }
   if (!c) return;
 
+  lastConn = {type: 'name', data: name};
   $('hostLabel').textContent = c.username + '@' + c.host;
   setTitle(name);
   term.reset();
@@ -583,6 +625,113 @@ function connectByName(name) {
       setStatus('disconnected');
     });
 }
+
+// ── Copy on select ──────────────────────────────────────────────────
+term.onSelectionChange(function() {
+  var sel = term.getSelection();
+  if (sel && navigator.clipboard) navigator.clipboard.writeText(sel).catch(function(){});
+});
+
+// ── Right-click paste ───────────────────────────────────────────────
+document.querySelector('.tw').addEventListener('contextmenu', function(e) {
+  e.preventDefault();
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(function(text) {
+      if (text && sid) queueInput(text);
+    }).catch(function(){});
+  }
+});
+
+// ── Search ──────────────────────────────────────────────────────────
+function toggleSearch() {
+  var bar = $('searchBar');
+  if (bar.classList.contains('h')) { bar.classList.remove('h'); $('searchInput').focus(); }
+  else closeSearch();
+}
+function closeSearch() { $('searchBar').classList.add('h'); searchAddon.clearDecorations(); term.focus(); }
+function searchNext() { searchAddon.findNext($('searchInput').value); }
+function searchPrev() { searchAddon.findPrevious($('searchInput').value); }
+$('searchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.shiftKey ? searchPrev() : searchNext(); }
+  if (e.key === 'Escape') closeSearch();
+});
+
+// ── Zoom ────────────────────────────────────────────────────────────
+function zoomIn() { fontSize = Math.min(fontSize + 2, 32); term.options.fontSize = fontSize; fitAddon.fit(); }
+function zoomOut() { fontSize = Math.max(fontSize - 2, 8); term.options.fontSize = fontSize; fitAddon.fit(); }
+
+// ── Reconnect ───────────────────────────────────────────────────────
+function doReconnect() {
+  if (!lastConn) return;
+  if (lastConn.type === 'saved') connectSaved(lastConn.data);
+  else if (lastConn.type === 'name') connectByName(lastConn.data);
+  else if (lastConn.type === 'manual') {
+    var d = lastConn.data;
+    $('iH').value = d.host; $('iP').value = d.port; $('iU').value = d.username;
+    $('iPw').value = d.password || '';
+    if (d.key) { setAuthTab('key'); $('iKey').value = d.key; }
+    doConnect();
+  }
+}
+
+// ── Fullscreen ──────────────────────────────────────────────────────
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(function(){});
+  else document.exitFullscreen();
+}
+
+// ── Visual bell ─────────────────────────────────────────────────────
+term.onBell(function() {
+  var tw = $('tw');
+  tw.classList.remove('bell');
+  void tw.offsetWidth; // reflow to restart animation
+  tw.classList.add('bell');
+});
+
+// ── Theme toggle ────────────────────────────────────────────────────
+var darkTheme = {
+  background:'#0d1117',foreground:'#e6edf3',cursor:'#58a6ff',cursorAccent:'#0d1117',
+  selectionBackground:'rgba(88,166,255,0.3)',
+  black:'#484f58',red:'#ff7b72',green:'#3fb950',yellow:'#d29922',
+  blue:'#58a6ff',magenta:'#bc8cff',cyan:'#39d353',white:'#b1bac4',
+  brightBlack:'#6e7681',brightRed:'#ffa198',brightGreen:'#56d364',
+  brightYellow:'#e3b341',brightBlue:'#79c0ff',brightMagenta:'#d2a8ff',
+  brightCyan:'#56d364',brightWhite:'#f0f6fc'
+};
+var lightTheme = {
+  background:'#ffffff',foreground:'#1f2328',cursor:'#0969da',cursorAccent:'#ffffff',
+  selectionBackground:'rgba(9,105,218,0.2)',
+  black:'#24292f',red:'#cf222e',green:'#1a7f37',yellow:'#9a6700',
+  blue:'#0969da',magenta:'#8250df',cyan:'#1b7c83',white:'#6e7781',
+  brightBlack:'#57606a',brightRed:'#a40e26',brightGreen:'#2da44e',
+  brightYellow:'#bf8700',brightBlue:'#218bff',brightMagenta:'#a475f9',
+  brightCyan:'#3192aa',brightWhite:'#8c959f'
+};
+function toggleTheme() {
+  var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  term.options.theme = isLight ? darkTheme : lightTheme;
+  localStorage.setItem('websh_theme', isLight ? 'dark' : 'light');
+}
+// Restore saved theme
+(function() {
+  var saved = localStorage.getItem('websh_theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    term.options.theme = lightTheme;
+  }
+})();
+
+// ── Keyboard shortcuts ──────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  // Ctrl+Shift+F — search
+  if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); toggleSearch(); }
+  // Ctrl+Plus / Ctrl+Minus — zoom
+  if (e.ctrlKey && !e.shiftKey && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomIn(); }
+  if (e.ctrlKey && !e.shiftKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+  // F11 — fullscreen
+  if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
+});
 
 // ── Init ─────────────────────────────────────────────────────────────
 loadServerConfig();

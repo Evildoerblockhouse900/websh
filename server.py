@@ -507,9 +507,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _input(self):
         try:
-            body = json.loads(self._body().decode("utf-8"))
-        except Exception:
-            self._json({"error": "invalid json"}, 400)
+            raw = self._body()
+            body = json.loads(raw.decode("utf-8"))
+        except Exception as e:
+            self._json({"error": "invalid json: " + str(e)}, 400)
             return
 
         with sessions_lock:
@@ -518,8 +519,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "session not found"}, 404)
             return
 
-        ok = session.write(body.get("data", "").encode("utf-8"))
-        self._json({"ok": ok, "alive": session.alive})
+        try:
+            data = body.get("data", "").encode("utf-8")
+            ok = session.write(data)
+            self._json({"ok": ok, "alive": session.alive})
+        except Exception as e:
+            self._json({"error": "input error: " + str(e)}, 500)
 
     def _output(self):
         params = urllib.parse.parse_qs(
