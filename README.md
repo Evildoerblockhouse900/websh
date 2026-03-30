@@ -10,27 +10,59 @@ Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 
 - Full terminal emulator in the browser ([xterm.js](https://xtermjs.org/))
 - Password and SSH key authentication
+- Server-side connection config — users click to connect, no passwords on the client
+- Restrict mode — limit connections to pre-configured hosts only
+- Auto-start — PHP launches the backend automatically, no SSH needed for setup
 - Saved connections (browser localStorage)
 - Works on shared hosting — no open ports, no WebSocket, no npm
 - Python backend uses only the standard library
 - Session timeout, auto-cleanup, terminal resize
 
-## Quick start
+## Quick start (shared hosting)
 
-**1. Start the backend:**
+The simplest setup — **no SSH access required**:
 
-```bash
-python3 server.py
+1. Upload `index.html`, `api.php`, and `server.py` to your web directory (e.g. via FTP)
+2. Open `https://your-host/console/index.html` in a browser
+
+That's it. The PHP proxy starts the Python backend automatically on first request.
+
+## Server-side connections
+
+You can pre-configure connections in a JSON file so users don't need to enter
+credentials. Create `websh.json`:
+
+```json
+{
+  "restrict_hosts": false,
+  "connections": [
+    {
+      "name": "Production",
+      "host": "server.example.com",
+      "port": 22,
+      "username": "deploy",
+      "password": "secret"
+    }
+  ]
+}
 ```
 
-Listens on `127.0.0.1:8765` by default.
+See `websh.json.example` for a full example including SSH key auth.
 
-**2. Serve the frontend:**
+> **Security: place this file OUTSIDE your web root.** It contains passwords
+> and must not be accessible via HTTP. The default path is two directories up
+> from `api.php` (e.g. if websh is in `/www/console/`, the config goes in `/`
+> — the site root above `www/`). Set a custom path with the `WEBSH_CONFIG`
+> environment variable.
 
-Put `index.html` and `api.php` in your web root. The PHP proxy forwards
-requests to the Python backend — no ports need to be exposed.
+### Restrict mode
 
-**3. Open** `https://your-host/console/index.html` **in a browser.**
+Set `"restrict_hosts": true` to only allow connections to hosts defined in
+the config. The manual connection form will be hidden, and the backend will
+reject any connection attempt to a host not in the list.
+
+This is useful when you want to provide SSH access to specific servers without
+letting users connect to arbitrary hosts.
 
 ## Configuration
 
@@ -42,6 +74,7 @@ Environment variables for `server.py`:
 | `HOST` | `127.0.0.1` | Bind address |
 | `SESSION_TIMEOUT` | `300` | Idle timeout in seconds |
 | `MAX_SESSIONS` | `10` | Max concurrent SSH sessions |
+| `WEBSH_CONFIG` | *(auto-detected)* | Path to `websh.json` config file |
 
 The PHP proxy reads `WEBSH_PORT` (default `8765`) to find the backend.
 
@@ -49,11 +82,12 @@ The PHP proxy reads `WEBSH_PORT` (default `8765`) to find the backend.
 
 ### Shared hosting (PHP + Python)
 
-The original setup. Upload all three files to your web directory.
-Start `server.py` in the background (screen, tmux, nohup, or cron `@reboot`).
+Upload the three files to your web directory. The backend starts automatically.
+
+For manual control (e.g. custom config path):
 
 ```bash
-nohup python3 server.py &
+WEBSH_CONFIG=/path/to/websh.json nohup python3 server.py &
 ```
 
 ### Docker
@@ -85,11 +119,12 @@ It is meant to be lightweight — add access control at the web server level:
 
 ### Saved connections & passwords
 
-Saved connections are stored in the browser's `localStorage` in plaintext,
+Saved connections in the browser are stored in `localStorage` in plaintext,
 including passwords. This is a deliberate trade-off for simplicity.
 
 If this is unacceptable for your use case:
-- Don't save connections with passwords — use SSH keys instead
+- Use server-side connections (`websh.json`) — passwords stay on the server
+- Don't save connections in the browser — use SSH keys instead
 - Restrict access to the websh URL to trusted networks
 
 ### SSH host keys
@@ -102,11 +137,13 @@ trusted network) this is acceptable.
 ## Project structure
 
 ```
-index.html      Frontend — xterm.js terminal + connection UI
-api.php         PHP proxy — forwards browser requests to backend
-server.py       Python backend — manages SSH sessions via PTY
-Dockerfile      Container deployment
-websh.service   systemd unit file
+index.html          Frontend — xterm.js terminal + connection UI
+api.php             PHP proxy — forwards browser requests to backend
+server.py           Python backend — manages SSH sessions via PTY
+websh.json.example  Example server-side config
+test_server.py      Tests
+Dockerfile          Container deployment
+websh.service       systemd unit file
 ```
 
 ## Requirements

@@ -11,6 +11,7 @@ Environment variables:
     HOST              — bind address (default: 127.0.0.1)
     SESSION_TIMEOUT   — seconds of inactivity before cleanup (default: 300)
     MAX_SESSIONS      — max concurrent SSH sessions (default: 10)
+    WEBSH_CONFIG      — path to websh.json config file (optional)
 
 API endpoints:
     POST /api/connect     — start SSH session
@@ -18,6 +19,7 @@ API endpoints:
     GET  /api/output      — long-poll for terminal output
     POST /api/resize      — resize terminal
     POST /api/disconnect  — close session
+    GET  /api/config      — return server-side config (without secrets)
     GET  /api/ping        — health check
 """
 
@@ -67,6 +69,79 @@ OUTPUT_BUF_KEEP = 524288      # keep last 512 KB on truncation
 
 # Terminal reset sequence: exit alt screen, show cursor, reset attrs, full reset
 TERM_RESET = b"\x1b[?1049l\x1b[?25h\x1b[0m\x1bc"
+
+
+# ─── Config file ────────────────────────────────────────────────────
+
+_config_cache = None
+_config_mtime = 0
+_CONFIG_EMPTY = {"connections": [], "restrict_hosts": False}
+
+
+def load_config():
+    """Load websh.json config with mtime-based caching."""
+    global _config_cache, _config_mtime
+    path = os.environ.get("WEBSH_CONFIG", "")
+    if not path or not os.path.isfile(path):
+        return _CONFIG_EMPTY
+    try:
+        mtime = os.path.getmtime(path)
+        if _config_cache is not None and mtime == _config_mtime:
+            return _config_cache
+        with open(path, "r") as f:
+            cfg = json.load(f)
+        conns = cfg.get("connections", [])
+        for c in conns:
+            c.setdefault("name", "")
+            c.setdefault("host", "")
+            c.setdefault("port", 22)
+            c.setdefault("username", "")
+        result = {
+            "connections": conns,
+            "restrict_hosts": bool(cfg.get("restrict_hosts", False)),
+        }
+        _config_cache = result
+        _config_mtime = mtime
+        return result
+    except Exception as e:
+        sys.stderr.write("websh: failed to load config: {}\n".format(e))
+        return _CONFIG_EMPTY
+
+
+def config_public():
+    """Return config safe for the client (no passwords or keys)."""
+    cfg = load_config()
+    safe = []
+    for c in cfg["connections"]:
+        safe.append({
+            "name": c.get("name", ""),
+            "host": c.get("host", ""),
+            "port": c.get("port", 22),
+            "username": c.get("username", ""),
+        })
+    return {"connections": safe, "restrict_hosts": cfg["restrict_hosts"]}
+
+
+def find_config_connection(name):
+    """Find a connection by name in config. Returns full entry with secrets."""
+    cfg = load_config()
+    for c in cfg["connections"]:
+        if c.get("name", "") == name:
+            return c
+    return None
+
+
+def is_host_allowed(host, port, username):
+    """Check if a host is allowed when restrict_hosts is on."""
+    cfg = load_config()
+    if not cfg["restrict_hosts"]:
+        return True
+    for c in cfg["connections"]:
+        if (c.get("host", "") == host
+                and c.get("port", 22) == port
+                and c.get("username", "") == username):
+            return True
+    return False
 
 
 # ─── Validation ──────────────────────────────────────────────────────
@@ -347,6 +422,8 @@ class Handler(BaseHTTPRequestHandler):
         p = self._path()
         if p == "/api/output":
             self._output()
+        elif p == "/api/config":
+            self._json(config_public())
         elif p == "/api/ping":
             self._json({"ok": True})
         else:
@@ -361,16 +438,36 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "invalid json"}, 400)
             return
 
-        # Validate
-        host = body.get("host", "").strip()
-        username = body.get("username", "").strip()
+        cols = clamp(body.get("cols"), MIN_COLS, MAX_COLS, 80)
+        rows = clamp(body.get("rows"), MIN_ROWS, MAX_ROWS, 24)
+
+        # Resolve credentials: by config connection name, or from request body
+        conn_name = body.get("connection", "").strip()
+        if conn_name:
+            entry = find_config_connection(conn_name)
+            if not entry:
+                self._json({"error": "connection not found"}, 404)
+                return
+            host = entry.get("host", "")
+            port = clamp(entry.get("port"), MIN_PORT, MAX_PORT, 22)
+            username = entry.get("username", "")
+            password = entry.get("password", "")
+            key = entry.get("key", "")
+        else:
+            host = body.get("host", "").strip()
+            username = body.get("username", "").strip()
+            port = clamp(body.get("port"), MIN_PORT, MAX_PORT, 22)
+            password = body.get("password", "")
+            key = body.get("key", "")
+
         if not host or not username:
             self._json({"error": "host and username are required"}, 400)
             return
 
-        port = clamp(body.get("port"), MIN_PORT, MAX_PORT, 22)
-        cols = clamp(body.get("cols"), MIN_COLS, MAX_COLS, 80)
-        rows = clamp(body.get("rows"), MIN_ROWS, MAX_ROWS, 24)
+        # Enforce restrict_hosts
+        if not conn_name and not is_host_allowed(host, port, username):
+            self._json({"error": "connections to this host are not allowed"}, 403)
+            return
 
         # Check session limit
         with sessions_lock:
@@ -386,10 +483,10 @@ class Handler(BaseHTTPRequestHandler):
                 host=host,
                 port=port,
                 username=username,
-                password=body.get("password", ""),
+                password=password,
                 cols=cols,
                 rows=rows,
-                key=body.get("key", ""),
+                key=key,
             )
             with sessions_lock:
                 sessions[sid] = session
@@ -399,7 +496,6 @@ class Handler(BaseHTTPRequestHandler):
                 sid, username, host, port))
             self._json({"session_id": sid, "status": "connected"})
         except Exception as e:
-            # Clean up on failure to prevent resource leak
             if session:
                 session.close()
             self._json({"error": str(e)}, 500)

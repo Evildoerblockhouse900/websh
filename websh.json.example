@@ -1,0 +1,19 @@
+{
+  "restrict_hosts": false,
+  "connections": [
+    {
+      "name": "Production",
+      "host": "server.example.com",
+      "port": 22,
+      "username": "deploy",
+      "password": "your-password-here"
+    },
+    {
+      "name": "Dev (SSH key)",
+      "host": "dev.example.com",
+      "port": 22,
+      "username": "admin",
+      "key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+    }
+  ]
+}

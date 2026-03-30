@@ -118,15 +118,22 @@
   <div class="panel">
     <h2>websh</h2>
 
-    <!-- Saved connections -->
-    <div class="saved-section">
+    <!-- Server connections (from config) -->
+    <div id="serverSection" class="saved-section h">
+      <div class="saved-label">Server connections</div>
+      <div id="serverList" class="saved-list"></div>
+    </div>
+
+    <!-- Saved connections (localStorage) -->
+    <div id="localSection" class="saved-section">
       <div class="saved-label">Saved connections</div>
       <div id="savedList" class="saved-list"></div>
     </div>
 
     <div id="divider" class="divider"><span>Connect</span></div>
 
-    <!-- Connection form -->
+    <!-- Connection form (hidden when restrict_hosts) -->
+    <div id="manualForm">
     <div class="row">
       <div class="fg"><label>Host</label><input id="iH" placeholder="example.com"></div>
       <div class="fg" style="max-width:90px"><label>Port</label><input id="iP" type="number" value="22"></div>
@@ -159,6 +166,7 @@
     </div>
 
     <button class="btn btn-p" onclick="doConnect()">Connect</button>
+    </div><!-- /manualForm -->
     <div id="err" class="err"></div>
   </div>
 </div>
@@ -218,6 +226,7 @@ var resizeTimer = null;
 var keepaliveTimer = null;
 var pollRetries = 0;
 var MAX_POLL_RETRIES = 5;
+var serverConfig = null; // loaded from /api/config
 
 // ── UI helpers ───────────────────────────────────────────────────────
 function $(id){ return document.getElementById(id) }
@@ -235,6 +244,7 @@ function showErr(m){ var e=$('err'); e.textContent=m; e.classList.add('on') }
 function hideErr(){ $('err').classList.remove('on') }
 
 function focusFirst() {
+  if ($('manualForm').classList.contains('h')) return;
   var el = $('iH');
   if (!el.value) { el.focus(); return }
   el = $('iU');
@@ -482,7 +492,85 @@ document.querySelectorAll('.panel input:not([type=checkbox])').forEach(function(
   el.addEventListener('keydown', function(e){ if (e.key === 'Enter') doConnect() });
 });
 
+// ── Server config ───────────────────────────────────────────────────
+function loadServerConfig() {
+  api('config').then(function(cfg) {
+    serverConfig = cfg;
+    renderServerConnections();
+  }).catch(function(){});
+}
+
+function renderServerConnections() {
+  if (!serverConfig || !serverConfig.connections || !serverConfig.connections.length) {
+    $('serverSection').className = 'saved-section h';
+    return;
+  }
+
+  $('serverSection').className = 'saved-section';
+  var el = $('serverList');
+  el.innerHTML = '';
+
+  serverConfig.connections.forEach(function(c) {
+    var div = document.createElement('div');
+    div.className = 'sv';
+    div.setAttribute('data-name', c.name);
+    div.innerHTML =
+      '<div class="sv-info">' +
+        '<div class="sv-name">' + esc(c.name) + '</div>' +
+        '<div class="sv-host">' + esc(c.username) + '@' + esc(c.host) + ':' + c.port + '</div>' +
+      '</div>';
+    el.appendChild(div);
+  });
+
+  el.onclick = function(e) {
+    var row = e.target.closest('.sv');
+    if (!row) return;
+    connectByName(row.getAttribute('data-name'));
+  };
+
+  // If restrict_hosts — hide manual form and local saved connections
+  if (serverConfig.restrict_hosts) {
+    $('manualForm').classList.add('h');
+    $('divider').classList.add('h');
+    $('localSection').classList.add('h');
+  }
+}
+
+function connectByName(name) {
+  hideErr();
+  var c = null;
+  if (serverConfig && serverConfig.connections) {
+    for (var i = 0; i < serverConfig.connections.length; i++) {
+      if (serverConfig.connections[i].name === name) { c = serverConfig.connections[i]; break; }
+    }
+  }
+  if (!c) return;
+
+  $('hostLabel').textContent = c.username + '@' + c.host;
+  term.reset();
+  term.focus();
+  setStatus('connecting');
+
+  api('connect', {body: {connection: name, cols: term.cols, rows: term.rows}})
+    .then(function(r) {
+      if (r.error) { showErr(r.error); setStatus('disconnected'); return }
+      sid = r.session_id;
+      setStatus('connected');
+      hideOverlay();
+      term.focus();
+      polling = true;
+      pollRetries = 0;
+      startKeepalive();
+      pollOutput();
+    })
+    .catch(function(e) {
+      showErr('Connection failed: ' + e.message);
+      setStatus('disconnected');
+    });
+}
+
 // ── Init ─────────────────────────────────────────────────────────────
+loadServerConfig();
 renderSaved();
 focusFirst();
 </script>
