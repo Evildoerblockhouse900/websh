@@ -30,13 +30,6 @@ Listens on `127.0.0.1:8765` by default.
 Put `index.html` and `api.php` in your web root. The PHP proxy forwards
 requests to the Python backend — no ports need to be exposed.
 
-For local development without PHP:
-
-```bash
-# server.py is already running on :8765
-# open index.html directly and point API to localhost:8765
-```
-
 **3. Open** `https://your-host/console/index.html` **in a browser.**
 
 ## Configuration
