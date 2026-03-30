@@ -18,7 +18,7 @@ if ($proto === 'http' || ($port !== '' && $port !== '443')) {
     exit;
 }
 
-set_time_limit(55);
+@set_time_limit(55);
 while (ob_get_level()) ob_end_clean();
 
 header('Content-Type: application/json');
@@ -48,7 +48,7 @@ switch ($action) {
         proxy_get($BACKEND . '/api/ping');
         break;
     default:
-        http_response_code(404);
+        header('HTTP/1.1 404 Not Found');
         echo '{"error":"unknown action"}';
         break;
 }
@@ -66,7 +66,7 @@ function proxy_post($url) {
     $err  = curl_error($ch);
     curl_close($ch);
     if ($resp === false) {
-        http_response_code(502);
+        header('HTTP/1.1 502 Bad Gateway');
         echo json_encode(array('error' => 'backend unavailable: ' . $err));
         return;
     }
@@ -126,7 +126,7 @@ function proxy_get($url) {
     $err  = curl_error($ch);
     curl_close($ch);
     if ($resp === false) {
-        http_response_code(502);
+        header('HTTP/1.1 502 Bad Gateway');
         echo json_encode(array('error' => 'backend unavailable: ' . $err));
         return;
     }
