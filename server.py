@@ -495,7 +495,11 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(CONNECT_SETTLE_TIME)
             sys.stderr.write("websh: new session {} for {}@{}:{}\n".format(
                 sid, username, host, port))
-            self._json({"session_id": sid, "status": "connected"})
+            self._json({
+                "session_id": sid,
+                "status": "connecting",
+                "alive": session.alive,
+            })
         except Exception as e:
             if session:
                 session.close()

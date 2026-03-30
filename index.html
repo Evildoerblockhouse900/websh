@@ -337,8 +337,8 @@ function connectSaved(c) {
   api('connect', {body: body})
     .then(function(r) {
       if (r.error) { showErr(r.error); setStatus('disconnected'); return }
+      if (r.alive === false) { showErr('SSH process exited immediately'); setStatus('disconnected'); return }
       sid = r.session_id;
-      setStatus('connected');
       hideOverlay();
       term.focus();
       polling = true;
@@ -376,6 +376,7 @@ function pollOutput() {
   api('output', {query: '&session_id=' + sid}).then(function(r) {
     pollRetries = 0;
     if (r.data) {
+      setStatus('connected');
       var bytes = Uint8Array.from(atob(r.data), function(c){ return c.charCodeAt(0) });
       term.write(bytes);
     }
@@ -458,8 +459,8 @@ function doConnect() {
   api('connect', {body: body})
     .then(function(r) {
       if (r.error) { showErr(r.error); setStatus('disconnected'); return }
+      if (r.alive === false) { showErr('SSH process exited immediately'); setStatus('disconnected'); return }
       sid = r.session_id;
-      setStatus('connected');
       hideOverlay();
       term.focus();
       polling = true;
@@ -568,8 +569,8 @@ function connectByName(name) {
   api('connect', {body: {connection: name, cols: term.cols, rows: term.rows}})
     .then(function(r) {
       if (r.error) { showErr(r.error); setStatus('disconnected'); return }
+      if (r.alive === false) { showErr('SSH process exited immediately'); setStatus('disconnected'); return }
       sid = r.session_id;
-      setStatus('connected');
       hideOverlay();
       term.focus();
       polling = true;
