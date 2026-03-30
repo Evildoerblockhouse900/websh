@@ -1,0 +1,24 @@
+[Unit]
+Description=websh — SSH terminal backend
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/websh/server.py
+Restart=on-failure
+RestartSec=5
+
+Environment=PORT=8765
+Environment=HOST=127.0.0.1
+Environment=SESSION_TIMEOUT=300
+Environment=MAX_SESSIONS=10
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

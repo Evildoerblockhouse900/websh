@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>websh</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg:#0d1117;--sf:#161b22;--bd:#30363d;--tx:#e6edf3;--dim:#8b949e;
+      --ac:#58a6ff;--ach:#79c0ff;--dg:#f85149;--ok:#3fb950;--wn:#d29922;
+      --radius:8px;
+    }
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--tx);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+    /* ── Top bar ── */
+    .top{display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:var(--sf);border-bottom:1px solid var(--bd);flex-shrink:0;min-height:40px}
+    .top-l{display:flex;align-items:center;gap:10px}
+    .logo{font-size:14px;font-weight:700;letter-spacing:-.5px}
+    .badge{font-size:11px;padding:2px 8px;border-radius:12px;font-weight:500}
+    .s-off{background:rgba(248,81,73,.15);color:var(--dg)}
+    .s-wait{background:rgba(210,153,34,.15);color:var(--wn)}
+    .s-on{background:rgba(63,185,80,.15);color:var(--ok)}
+    .host-label{font-size:12px;color:var(--dim)}
+    .btn{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--bd);background:var(--sf);color:var(--tx);font-size:12px;cursor:pointer;transition:.15s;white-space:nowrap}
+    .btn:hover{border-color:var(--dim)}
+    .btn-p{background:var(--ac);border-color:var(--ac);color:#fff}
+    .btn-p:hover{background:var(--ach)}
+    .btn-d{border-color:var(--dg);color:var(--dg)}
+    .btn-d:hover{background:rgba(248,81,73,.15)}
+
+    /* ── Connect overlay ── */
+    .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+    .ov.h{display:none}
+    .panel{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:24px 28px;width:460px;max-width:95vw;max-height:90vh;overflow-y:auto}
+    .panel h2{font-size:17px;margin-bottom:16px;font-weight:600}
+
+    /* ── Saved connections ── */
+    .saved-section{margin-bottom:20px}
+    .saved-label{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+    .saved-list{max-height:176px;overflow-y:auto;border:1px solid var(--bd);border-radius:var(--radius)}
+    .saved-list:empty{display:none}
+    .saved-section:has(.saved-list:empty){display:none}
+    .sv{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--bd);transition:background .1s;cursor:pointer}
+    .sv:last-child{border-bottom:none}
+    .sv:hover{background:rgba(88,166,255,.06)}
+    .sv-info{flex:1;min-width:0}
+    .sv-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sv-host{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sv-actions{display:flex;gap:4px;flex-shrink:0;margin-left:8px}
+    .sv-btn{padding:4px 10px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--dim);font-size:11px;cursor:pointer;transition:.15s}
+    .sv-btn.del:hover{color:var(--dg);background:rgba(248,81,73,.1)}
+
+    .saved-list::-webkit-scrollbar{width:6px}
+    .saved-list::-webkit-scrollbar-track{background:transparent}
+    .saved-list::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+
+    /* ── Divider ── */
+    .divider{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+    .divider span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+
+    /* ── Form ── */
+    .fg{margin-bottom:12px}
+    .fg label{display:block;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+    .fg input{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
+    .fg input:focus{border-color:var(--ac)}
+    .row{display:flex;gap:10px}.row .fg{flex:1}
+
+    .save-row{display:flex;align-items:center;gap:8px;margin:12px 0 4px}
+    .save-row input[type=checkbox]{accent-color:var(--ac);width:14px;height:14px;cursor:pointer}
+    .save-row label{font-size:13px;color:var(--dim);cursor:pointer}
+    .save-name{margin-top:6px}
+    .save-name.h{display:none}
+
+    /* ── Auth tabs ── */
+    .auth-tabs{display:flex;gap:0;margin-bottom:12px;border:1px solid var(--bd);border-radius:var(--radius);overflow:hidden}
+    .auth-tab{flex:1;padding:6px;border:none;background:var(--bg);color:var(--dim);font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+    .auth-tab.active{background:var(--bd);color:var(--tx)}
+    .auth-tab:hover:not(.active){background:rgba(88,166,255,.06)}
+    .fg textarea{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-size:12px;font-family:'Menlo','Monaco',monospace;outline:none;transition:border-color .15s;resize:vertical;min-height:60px}
+    .fg textarea:focus{border-color:var(--ac)}
+    .fg-hint{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;display:block}
+    .h{display:none!important}
+
+    .panel .btn-p{width:100%;padding:10px;font-size:14px;margin-top:8px}
+    .err{color:var(--dg);font-size:13px;margin-top:10px;display:none}
+    .err.on{display:block}
+
+    /* ── Terminal ── */
+    .tw{flex:1;padding:2px;overflow:hidden}
+    #terminal{width:100%;height:100%}
+    .xterm-viewport::-webkit-scrollbar{width:8px}
+    .xterm-viewport::-webkit-scrollbar-track{background:transparent}
+    .xterm-viewport::-webkit-scrollbar-thumb{background:var(--bd);border-radius:4px}
+  </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top">
+  <div class="top-l">
+    <span class="logo">websh</span>
+    <span id="badge" class="badge s-off">Disconnected</span>
+    <span id="hostLabel" class="host-label"></span>
+  </div>
+  <div>
+    <button id="btnDisc" class="btn btn-d" style="display:none" onclick="doDisconnect()">Disconnect</button>
+  </div>
+</div>
+
+<!-- Terminal (behind overlay when disconnected) -->
+<div class="tw"><div id="terminal"></div></div>
+
+<!-- Connect overlay -->
+<div id="ov" class="ov">
+  <div class="panel">
+    <h2>websh</h2>
+
+    <!-- Saved connections -->
+    <div class="saved-section">
+      <div class="saved-label">Saved connections</div>
+      <div id="savedList" class="saved-list"></div>
+    </div>
+
+    <div id="divider" class="divider"><span>Connect</span></div>
+
+    <!-- Connection form -->
+    <div class="row">
+      <div class="fg"><label>Host</label><input id="iH" placeholder="example.com"></div>
+      <div class="fg" style="max-width:90px"><label>Port</label><input id="iP" type="number" value="22"></div>
+    </div>
+    <div class="fg"><label>Username</label><input id="iU" placeholder="root"></div>
+
+    <div class="auth-tabs">
+      <button id="tabPw" class="auth-tab active" onclick="setAuthTab('pw')">Password</button>
+      <button id="tabKey" class="auth-tab" onclick="setAuthTab('key')">SSH Key</button>
+    </div>
+    <div id="authPw" class="fg">
+      <label>Password</label>
+      <input id="iPw" type="password">
+    </div>
+    <div id="authKey" class="fg h">
+      <label>Private Key</label>
+      <textarea id="iKey" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----" rows="4"></textarea>
+      <div style="margin-top:4px">
+        <label class="fg-hint">Passphrase (if any)</label>
+        <input id="iKeyPw" type="password" placeholder="optional">
+      </div>
+    </div>
+
+    <div class="save-row">
+      <input type="checkbox" id="iSave" onchange="toggleSaveName()">
+      <label for="iSave">Save this connection</label>
+    </div>
+    <div id="saveNameWrap" class="save-name h">
+      <div class="fg"><label>Connection name</label><input id="iName" placeholder="my-server"></div>
+    </div>
+
+    <button class="btn btn-p" onclick="doConnect()">Connect</button>
+    <div id="err" class="err"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.min.js"></script>
+<script>
+// ── API ──────────────────────────────────────────────────────────────
+var API = location.pathname.replace(/\/[^/]*$/, '') + '/api.php';
+
+function api(action, opts) {
+  opts = opts || {};
+  var url = API + '?action=' + action + (opts.query || '');
+  var init = {};
+  if (opts.body) {
+    init.method = 'POST';
+    init.body = JSON.stringify(opts.body);
+    init.headers = {'Content-Type': 'application/json'};
+  }
+  return fetch(url, init).then(function(r) { return r.json() });
+}
+
+// ── Terminal setup ───────────────────────────────────────────────────
+var fitAddon = new FitAddon.FitAddon();
+var term = new Terminal({
+  cursorBlink: true, cursorStyle: 'bar', fontSize: 14,
+  fontFamily: "'Menlo','Monaco','SF Mono','Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace",
+  fontWeight: 'normal', fontWeightBold: 'bold',
+  theme: {
+    background:'#0d1117', foreground:'#e6edf3', cursor:'#58a6ff', cursorAccent:'#0d1117',
+    selectionBackground:'rgba(88,166,255,0.3)',
+    black:'#484f58', red:'#ff7b72', green:'#3fb950', yellow:'#d29922',
+    blue:'#58a6ff', magenta:'#bc8cff', cyan:'#39d353', white:'#b1bac4',
+    brightBlack:'#6e7681', brightRed:'#ffa198', brightGreen:'#56d364',
+    brightYellow:'#e3b341', brightBlue:'#79c0ff', brightMagenta:'#d2a8ff',
+    brightCyan:'#56d364', brightWhite:'#f0f6fc',
+  },
+  allowProposedApi: true, scrollback: 50000,
+});
+term.loadAddon(fitAddon);
+term.loadAddon(new WebLinksAddon.WebLinksAddon());
+var u11 = new Unicode11Addon.Unicode11Addon(); term.loadAddon(u11);
+term.unicode.activeVersion = '11';
+term.open(document.getElementById('terminal'));
+fitAddon.fit();
+window.addEventListener('resize', function(){ fitAddon.fit() });
+new ResizeObserver(function(){ fitAddon.fit() }).observe(document.querySelector('.tw'));
+
+// ── State ────────────────────────────────────────────────────────────
+var sid = null;
+var polling = false;
+var inputQueue = [];
+var flushTimer = null;
+var resizeTimer = null;
+var keepaliveTimer = null;
+var pollRetries = 0;
+var MAX_POLL_RETRIES = 5;
+
+// ── UI helpers ───────────────────────────────────────────────────────
+function $(id){ return document.getElementById(id) }
+
+function setStatus(s) {
+  var b = $('badge');
+  b.className = 'badge ' + (s === 'connected' ? 's-on' : s === 'connecting' ? 's-wait' : 's-off');
+  b.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  $('btnDisc').style.display = s === 'connected' ? '' : 'none';
+}
+
+function showOverlay(){ $('ov').classList.remove('h'); focusFirst() }
+function hideOverlay(){ $('ov').classList.add('h') }
+function showErr(m){ var e=$('err'); e.textContent=m; e.classList.add('on') }
+function hideErr(){ $('err').classList.remove('on') }
+
+function focusFirst() {
+  var el = $('iH');
+  if (!el.value) { el.focus(); return }
+  el = $('iU');
+  if (!el.value) { el.focus(); return }
+  $('iPw').focus();
+}
+
+function toggleSaveName() {
+  $('saveNameWrap').className = $('iSave').checked ? 'save-name' : 'save-name h';
+}
+
+var authMode = 'pw';
+function setAuthTab(mode) {
+  authMode = mode;
+  $('tabPw').className = 'auth-tab' + (mode === 'pw' ? ' active' : '');
+  $('tabKey').className = 'auth-tab' + (mode === 'key' ? ' active' : '');
+  $('authPw').className = mode === 'pw' ? 'fg' : 'fg h';
+  $('authKey').className = mode === 'key' ? 'fg' : 'fg h';
+}
+
+// ── Saved connections (localStorage) ─────────────────────────────────
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem('websh_connections') || '[]') }
+  catch(e) { return [] }
+}
+
+function saveSaved(list) {
+  localStorage.setItem('websh_connections', JSON.stringify(list));
+}
+
+function renderSaved() {
+  var list = loadSaved();
+  var el = $('savedList');
+  el.innerHTML = '';
+
+  $('divider').querySelector('span').textContent = list.length ? 'Or connect manually' : 'Connect';
+
+  list.forEach(function(c, i) {
+    var div = document.createElement('div');
+    div.className = 'sv';
+    div.setAttribute('data-idx', i);
+    div.innerHTML =
+      '<div class="sv-info">' +
+        '<div class="sv-name">' + esc(c.name) + '</div>' +
+        '<div class="sv-host">' + esc(c.user) + '@' + esc(c.host) + ':' + c.port + (c.key ? ' (key)' : '') + '</div>' +
+      '</div>' +
+      '<div class="sv-actions">' +
+        '<button class="sv-btn del" data-idx="' + i + '">Delete</button>' +
+      '</div>';
+    el.appendChild(div);
+  });
+
+  el.onclick = function(e) {
+    if (e.target.classList.contains('del')) {
+      var idx = parseInt(e.target.getAttribute('data-idx'));
+      list.splice(idx, 1);
+      saveSaved(list);
+      renderSaved();
+      return;
+    }
+    var row = e.target.closest('.sv');
+    if (!row) return;
+    var idx = parseInt(row.getAttribute('data-idx'));
+    if (isNaN(idx)) return;
+    connectSaved(list[idx]);
+  };
+}
+
+function connectSaved(c) {
+  hideErr();
+  $('hostLabel').textContent = c.user + '@' + c.host;
+  term.reset();
+  term.focus();
+  setStatus('connecting');
+
+  var body = {host: c.host, port: c.port, username: c.user, password: c.pass || '', cols: term.cols, rows: term.rows};
+  if (c.key) body.key = c.key;
+
+  api('connect', {body: body})
+    .then(function(r) {
+      if (r.error) { showErr(r.error); setStatus('disconnected'); return }
+      sid = r.session_id;
+      setStatus('connected');
+      hideOverlay();
+      term.focus();
+      polling = true;
+      pollRetries = 0;
+      startKeepalive();
+      pollOutput();
+    })
+    .catch(function(e) {
+      showErr('Connection failed: ' + e.message);
+      setStatus('disconnected');
+    });
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ── Keepalive ───────────────────────────────────────────────────────
+function startKeepalive() {
+  stopKeepalive();
+  keepaliveTimer = setInterval(function() {
+    if (sid) api('ping').catch(function(){});
+  }, 30000);
+}
+
+function stopKeepalive() {
+  if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+}
+
+// ── Polling loop ─────────────────────────────────────────────────────
+function pollOutput() {
+  if (!sid || !polling) return;
+  api('output', {query: '&session_id=' + sid}).then(function(r) {
+    pollRetries = 0;
+    if (r.data) {
+      var bytes = Uint8Array.from(atob(r.data), function(c){ return c.charCodeAt(0) });
+      term.write(bytes);
+    }
+    if (r.alive === false) {
+      term.write('\r\n\x1b[90m--- connection closed ---\x1b[0m\r\n');
+      stopKeepalive();
+      setStatus('disconnected');
+      polling = false;
+      sid = null;
+      showOverlay();
+      return;
+    }
+    if (polling) pollOutput();
+  }).catch(function() {
+    pollRetries++;
+    if (pollRetries >= MAX_POLL_RETRIES) {
+      term.write('\r\n\x1b[91m--- connection lost ---\x1b[0m\r\n');
+      stopKeepalive();
+      setStatus('disconnected');
+      polling = false;
+      sid = null;
+      showOverlay();
+      return;
+    }
+    var delay = Math.min(1000 * Math.pow(2, pollRetries - 1), 10000);
+    setTimeout(function(){ if (polling) pollOutput() }, delay);
+  });
+}
+
+// ── Input batching ───────────────────────────────────────────────────
+function flushInput() {
+  if (!sid || !inputQueue.length) return;
+  var data = inputQueue.join('');
+  inputQueue = [];
+  api('input', {body: {session_id: sid, data: data}}).catch(function(){});
+}
+
+function queueInput(data) {
+  inputQueue.push(data);
+  if (!flushTimer) flushTimer = setTimeout(function(){ flushTimer = null; flushInput() }, 10);
+}
+
+// ── Connect / Disconnect ─────────────────────────────────────────────
+function doConnect() {
+  hideErr();
+  var host = $('iH').value.trim();
+  var port = parseInt($('iP').value) || 22;
+  var username = $('iU').value.trim();
+  var password = authMode === 'pw' ? $('iPw').value : $('iKeyPw').value;
+  var key = authMode === 'key' ? $('iKey').value.trim() : '';
+
+  if (!host || !username) { showErr('Host and username are required'); return }
+  if (authMode === 'pw' && !password) { showErr('Password is required'); return }
+  if (authMode === 'key' && !key) { showErr('Private key is required'); return }
+
+  // Save connection if requested
+  if ($('iSave').checked) {
+    var name = $('iName').value.trim() || (username + '@' + host);
+    var list = loadSaved();
+    var entry = {name: name, host: host, port: port, user: username, auth: authMode};
+    if (authMode === 'pw') entry.pass = password;
+    else entry.key = key;
+    list = list.filter(function(c){ return c.name !== name });
+    list.unshift(entry);
+    saveSaved(list);
+    $('iSave').checked = false;
+    toggleSaveName();
+  }
+
+  $('hostLabel').textContent = username + '@' + host;
+  term.reset();
+  term.focus();
+  setStatus('connecting');
+
+  var body = {host: host, port: port, username: username, password: password, cols: term.cols, rows: term.rows};
+  if (key) body.key = key;
+
+  api('connect', {body: body})
+    .then(function(r) {
+      if (r.error) { showErr(r.error); setStatus('disconnected'); return }
+      sid = r.session_id;
+      setStatus('connected');
+      hideOverlay();
+      term.focus();
+      polling = true;
+      pollRetries = 0;
+      startKeepalive();
+      pollOutput();
+    })
+    .catch(function(e) {
+      showErr('Connection failed: ' + e.message);
+      setStatus('disconnected');
+    });
+}
+
+function doDisconnect() {
+  polling = false;
+  stopKeepalive();
+  if (sid) {
+    api('disconnect', {body: {session_id: sid}}).catch(function(){});
+    sid = null;
+  }
+  setStatus('disconnected');
+  term.reset();
+  showOverlay();
+  renderSaved();
+}
+
+// ── Terminal events ──────────────────────────────────────────────────
+term.onData(function(d){ queueInput(d) });
+term.onBinary(function(d){ queueInput(d) });
+
+// Debounced resize — avoids flooding the server during window drag
+term.onResize(function(size) {
+  if (!sid) return;
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function() {
+    resizeTimer = null;
+    if (sid) api('resize', {body: {session_id: sid, cols: size.cols, rows: size.rows}}).catch(function(){});
+  }, 150);
+});
+
+// ── Enter to connect in form ─────────────────────────────────────────
+document.querySelectorAll('.panel input:not([type=checkbox])').forEach(function(el) {
+  el.addEventListener('keydown', function(e){ if (e.key === 'Enter') doConnect() });
+});
+
+// ── Init ─────────────────────────────────────────────────────────────
+renderSaved();
+focusFirst();
+</script>
+</body>
+</html>
