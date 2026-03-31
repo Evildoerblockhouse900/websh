@@ -116,6 +116,15 @@
     body.resizing{cursor:col-resize!important;user-select:none!important}
     body.resizing-v{cursor:row-resize!important;user-select:none!important}
 
+    /* ── Reconnect bar ── */
+    .reconnect-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:4px 8px;background:rgba(248,81,73,.08);border-bottom:1px solid var(--bd);flex-shrink:0}
+    .reconnect-bar .btn{font-size:11px;padding:3px 12px}
+
+    /* ── Idle warning ── */
+    .idle-warn{position:absolute;bottom:8px;right:12px;z-index:50;background:var(--sf);border:1px solid var(--wn);border-radius:var(--radius);padding:6px 12px;font-size:12px;color:var(--wn);display:flex;align-items:center;gap:8px}
+    .idle-warn .btn{font-size:11px;padding:3px 10px;border-color:var(--wn);color:var(--wn)}
+    .idle-warn .btn:hover{background:rgba(210,153,34,.15)}
+
     /* ── Search bar ── */
     .search-bar{position:absolute;top:28px;right:12px;display:flex;gap:4px;z-index:50;background:var(--sf);border:1px solid var(--bd);border-radius:var(--radius);padding:4px 6px;align-items:center}
     .search-bar.h{display:none}
@@ -150,6 +159,7 @@
     <button class="tbtn" onclick="toggleSearch()" title="Search (Ctrl+Shift+F)" aria-label="Search">&#x1F50D;</button>
     <button class="tbtn" onclick="zoomIn()" title="Zoom in (Ctrl+Plus)" aria-label="Zoom in">A+</button>
     <button class="tbtn" onclick="zoomOut()" title="Zoom out (Ctrl+Minus)" aria-label="Zoom out">A-</button>
+    <button class="tbtn" onclick="exportTerminal()" title="Export terminal" aria-label="Export terminal">&#x1F4CB;</button>
     <button class="tbtn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme" id="btnTheme">&#x25D1;</button>
     <button class="tbtn" onclick="toggleFullscreen()" title="Fullscreen (F11)" aria-label="Fullscreen">&#x26F6;</button>
   </div>
@@ -242,6 +252,7 @@ var activeId = null;
 var paneCounter = 0;
 var connectingFor = null; // pane ID the overlay is connecting for
 var serverConfig = null;
+var sessionTimeout = 300; // updated from server config
 var fontSize = 14;
 var MAX_POLL_RETRIES = 5;
 var authMode = 'pw';
@@ -289,6 +300,11 @@ function createPane(container) {
       '<button class="pane-btn" onclick="splitPane(\'' + id + '\',\'v\')" title="Split vertical" aria-label="Split vertical">&#x2195;</button>' +
       '<button class="pane-btn close" onclick="closePane(\'' + id + '\')" title="Close pane" aria-label="Close pane">&#x2715;</button>' +
     '</div>' +
+    '<div class="reconnect-bar h" data-reconnect="' + id + '">' +
+      '<span style="font-size:12px;color:var(--dim)">Disconnected</span>' +
+      '<button class="btn btn-p" onclick="reconnectPane(\'' + id + '\')">Reconnect</button>' +
+      '<button class="btn" onclick="newConnectionPane(\'' + id + '\')">New connection</button>' +
+    '</div>' +
     '<div class="pane-term"></div>' +
     '<div class="search-bar h" data-search="' + id + '">' +
       '<input type="text" placeholder="Search...">' +
@@ -318,7 +334,8 @@ function createPane(container) {
     id:id, el:el, term:term, fitAddon:fit, searchAddon:search,
     sid:null, polling:false, pollRetries:0,
     inputQueue:[], flushTimer:null, keepaliveTimer:null,
-    label:'', resizeTimer:null, upload:null, download:null, connectBody:null
+    label:'', resizeTimer:null, upload:null, download:null, connectBody:null,
+    idleTimer:null, idleWarnEl:null
   };
   panes[id] = p;
 
@@ -447,9 +464,11 @@ function closePane(id) {
   if (p.sid) {
     p.polling = false;
     stopKeepalive(p);
+    clearIdleTimer(p);
     api('disconnect', {body:{session_id:p.sid}}).catch(function(){});
   }
   p.term.dispose();
+  saveSessions();
 
   var wrap = p.el.parentNode;
   delete panes[id];
@@ -499,6 +518,110 @@ function stopKeepalive(p) {
   if(p.keepaliveTimer){ clearInterval(p.keepaliveTimer); p.keepaliveTimer=null }
 }
 
+// ── Reconnect ────────────────────────────────────────────────────────
+function showReconnectBar(p) {
+  var bar = p.el.querySelector('[data-reconnect]');
+  if (bar) bar.classList.remove('h');
+}
+function hideReconnectBar(p) {
+  var bar = p.el.querySelector('[data-reconnect]');
+  if (bar) bar.classList.add('h');
+}
+function reconnectPane(id) {
+  var p = panes[id]; if (!p || !p.connectBody) return;
+  hideReconnectBar(p);
+  connectPane(p, {body: p.connectBody, label: p.label});
+}
+function newConnectionPane(id) {
+  var p = panes[id]; if (!p) return;
+  hideReconnectBar(p);
+  p.term.reset();
+  connectingFor = p.id;
+  showOverlay();
+  var hasOthers = Object.keys(panes).length > 1;
+  $('btnCancel').className = hasOthers ? 'btn btn-cancel' : 'btn btn-cancel h';
+  prefillForm(p);
+  renderSaved();
+}
+
+// ── Idle timeout warning ────────────────────────────────────────────
+function resetIdleTimer(p) {
+  clearIdleTimer(p);
+  if (!p.sid || sessionTimeout <= 0) return;
+  var warnAt = Math.max(0, sessionTimeout - 30) * 1000;
+  p.idleTimer = setTimeout(function() { showIdleWarning(p); }, warnAt);
+}
+function clearIdleTimer(p) {
+  if (p.idleTimer) { clearTimeout(p.idleTimer); p.idleTimer = null; }
+  dismissIdleWarning(p);
+}
+function showIdleWarning(p) {
+  if (!p.sid) return;
+  var el = document.createElement('div');
+  el.className = 'idle-warn';
+  el.innerHTML = 'Session idle — will disconnect in 30s ' +
+    '<button class="btn" onclick="keepAlive(\'' + p.id + '\')">Keep alive</button>';
+  p.el.appendChild(el);
+  p.idleWarnEl = el;
+}
+function dismissIdleWarning(p) {
+  if (p.idleWarnEl) { p.idleWarnEl.remove(); p.idleWarnEl = null; }
+}
+function keepAlive(id) {
+  var p = panes[id]; if (!p || !p.sid) return;
+  // Send empty input to reset server-side activity timer
+  api('input', {body: {session_id: p.sid, data: ''}}).catch(function(){});
+  resetIdleTimer(p);
+}
+
+// ── Session persistence (sessionStorage) ────────────────────────────
+function saveSessions() {
+  var data = {};
+  Object.keys(panes).forEach(function(k) {
+    var p = panes[k];
+    if (p.sid && p.connectBody) {
+      data[k] = {sid: p.sid, label: p.label, connectBody: p.connectBody};
+    }
+  });
+  try { sessionStorage.setItem('websh_sessions', JSON.stringify(data)); } catch(e) {}
+}
+function loadSessions() {
+  try { return JSON.parse(sessionStorage.getItem('websh_sessions') || '{}'); } catch(e) { return {}; }
+}
+function clearSavedSessions() {
+  try { sessionStorage.removeItem('websh_sessions'); } catch(e) {}
+}
+
+// ── Pre-fill form from last connection ──────────────────────────────
+function prefillForm(p) {
+  if (!p || !p.connectBody) return;
+  var b = p.connectBody;
+  if (b.host) $('iH').value = b.host;
+  if (b.port) $('iP').value = b.port;
+  if (b.username) $('iU').value = b.username;
+}
+
+// ── Export terminal ─────────────────────────────────────────────────
+function exportTerminal() {
+  var p = panes[activeId]; if (!p) return;
+  var buf = p.term.buffer.active;
+  var lines = [];
+  for (var i = 0; i <= buf.length - 1; i++) {
+    var line = buf.getLine(i);
+    if (line) lines.push(line.translateToString(true));
+  }
+  // Trim trailing empty lines
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  var text = lines.join('\n') + '\n';
+  var blob = new Blob([text], {type: 'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (p.label || 'terminal') + '.txt';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 function pollOutput(p) {
   if(!p.sid || !p.polling) return;
   api('output',{query:'&session_id='+p.sid}).then(function(r){
@@ -506,29 +629,38 @@ function pollOutput(p) {
     if(r.data){
       updatePaneBadge(p);
       p.term.write(Uint8Array.from(atob(r.data),function(c){return c.charCodeAt(0)}));
+      resetIdleTimer(p);
     }
     if(r.alive===false){
       p.term.write('\r\n\x1b[90m--- connection closed ---\x1b[0m\r\n');
-      stopKeepalive(p); p.polling=false; p.sid=null;
+      stopKeepalive(p); clearIdleTimer(p); p.polling=false; p.sid=null;
+      saveSessions();
+      if(p.connectBody) showReconnectBar(p);
       if(activeId===p.id) updatePaneBadge(p);
       return;
     }
     if(p.polling) pollOutput(p);
-  }).catch(function(){
+  }).catch(function(e){
     p.pollRetries++;
     if(p.pollRetries>=MAX_POLL_RETRIES){
-      p.term.write('\r\n\x1b[91m--- connection lost ---\x1b[0m\r\n');
-      stopKeepalive(p); p.polling=false; p.sid=null;
+      var msg = (e && e.message && e.message.indexOf('502') !== -1)
+        ? '\r\n\x1b[91m--- backend restarted, session lost ---\x1b[0m\r\n'
+        : '\r\n\x1b[91m--- connection lost ---\x1b[0m\r\n';
+      p.term.write(msg);
+      stopKeepalive(p); clearIdleTimer(p); p.polling=false; p.sid=null;
+      saveSessions();
+      if(p.connectBody) showReconnectBar(p);
       if(activeId===p.id) updatePaneBadge(p);
       return;
     }
-    var delay=Math.min(1000*Math.pow(2,p.pollRetries-1),10000);
-    setTimeout(function(){ if(p.polling) pollOutput(p) },delay);
+    var d=Math.min(1000*Math.pow(2,p.pollRetries-1),10000);
+    setTimeout(function(){ if(p.polling) pollOutput(p) },d);
   });
 }
 
 function queueInput(p, data) {
   p.inputQueue.push(data);
+  resetIdleTimer(p);
   if(!p.flushTimer) p.flushTimer = setTimeout(function(){
     p.flushTimer=null;
     if(!p.sid||!p.inputQueue.length) return;
@@ -541,6 +673,7 @@ function queueInput(p, data) {
 function connectPane(p, opts) {
   p.label = opts.label;
   p.connectBody = opts.body; // store for background sessions (upload)
+  hideReconnectBar(p);
   var labelEl = p.el.querySelector('[data-pane-label]');
   if (labelEl) labelEl.textContent = opts.label;
   p.term.reset();
@@ -559,6 +692,8 @@ function connectPane(p, opts) {
       p.polling = true;
       p.pollRetries = 0;
       startKeepalive(p);
+      resetIdleTimer(p);
+      saveSessions();
       pollOutput(p);
     })
     .catch(function(e) {
@@ -676,8 +811,9 @@ function doConnect() {
 
 function doDisconnect() {
   var p=panes[activeId]; if(!p) return;
-  p.polling=false; stopKeepalive(p);
+  p.polling=false; stopKeepalive(p); clearIdleTimer(p);
   if(p.sid){api('disconnect',{body:{session_id:p.sid}}).catch(function(){});p.sid=null}
+  saveSessions();
   p.label='';
   var labelEl=p.el.querySelector('[data-pane-label]'); if(labelEl) labelEl.textContent='';
   updatePaneBadge(p);
@@ -694,7 +830,21 @@ function doDisconnect() {
 // ── Server config ───────────────────────────────────────────────────
 function loadServerConfig() {
   api('config').then(function(cfg){
-    serverConfig=cfg;renderServerConnections();showOverlay();
+    serverConfig=cfg;
+    if(cfg.session_timeout) sessionTimeout=cfg.session_timeout;
+    renderServerConnections();
+    // Try to restore sessions from page reload
+    if(!tryRestoreSessions()) {
+      // Check for URL anchor auto-connect: #connect=ConnectionName
+      var hash = location.hash.replace(/^#/, '');
+      var m = hash.match(/^connect=(.+)/);
+      if(m && serverConfig && serverConfig.connections) {
+        var name = decodeURIComponent(m[1]);
+        var found = serverConfig.connections.some(function(c){return c.name===name});
+        if(found) { connectByName(name); return; }
+      }
+      showOverlay();
+    }
   }).catch(function(){
     showOverlay();
   });
@@ -1063,13 +1213,13 @@ function updateDownloadProgress(p) {
   if (!dl) return;
   var el = p.el.querySelector('[data-upload-progress]');
   if (!el) return;
-  var pct = 0;
-  if (dl.expectedSize > 0) {
-    var expectedB64 = Math.ceil(dl.expectedSize / 3) * 4 + dl.expectedSize / 76;
-    pct = Math.min(99, Math.round(dl.b64.length / expectedB64 * 100));
-  }
-  el.querySelector('.upload-progress-bar').style.width = pct + '%';
-  el.querySelector('.upload-progress-text').textContent = dl.filename + ' ' + pct + '%';
+  var bar = el.querySelector('.upload-progress-bar');
+  // Indeterminate: pulse between 20-80% based on data received
+  var kb = Math.round(dl.b64.length / 1024);
+  var pulse = 20 + (Math.sin(Date.now() / 500) + 1) * 30;
+  bar.style.width = pulse + '%';
+  bar.style.opacity = '0.7';
+  el.querySelector('.upload-progress-text').textContent = dl.filename + ' (' + kb + ' KB)';
 }
 
 function saveDownload(p) {
@@ -1190,13 +1340,11 @@ function toggleTheme(){
   localStorage.setItem('websh_theme',isLight?'dark':'light');
 }
 
-// ── Split handle drag resize ────────────────────────────────────────
+// ── Split handle drag resize (mouse + touch) ───────────────────────
 (function(){
   var dragging=null;
-  document.addEventListener('mousedown',function(e){
-    if(!e.target.classList.contains('split-handle')) return;
-    e.preventDefault();
-    var handle=e.target, wrap=handle.parentNode;
+  function startDrag(handle, clientX, clientY) {
+    var wrap=handle.parentNode;
     var isH=wrap.classList.contains('split-h');
     var children=[];
     for(var i=0;i<wrap.children.length;i++){
@@ -1207,43 +1355,89 @@ function toggleTheme(){
     dragging={handle:handle,wrap:wrap,isH:isH,a:children[0],b:children[1]};
     handle.classList.add('dragging');
     document.body.classList.add(isH?'resizing':'resizing-v');
-  });
-  document.addEventListener('mousemove',function(e){
+  }
+  function moveDrag(clientX, clientY) {
     if(!dragging) return;
     var rect=dragging.wrap.getBoundingClientRect();
-    var ratio;
-    if(dragging.isH){
-      ratio=(e.clientX-rect.left)/rect.width;
-    } else {
-      ratio=(e.clientY-rect.top)/rect.height;
-    }
+    var ratio = dragging.isH
+      ? (clientX-rect.left)/rect.width
+      : (clientY-rect.top)/rect.height;
     ratio=Math.max(0.1,Math.min(0.9,ratio));
     dragging.a.style.flex=ratio+'';
     dragging.b.style.flex=(1-ratio)+'';
-    // Refit terminals in affected panes
     Object.keys(panes).forEach(function(k){panes[k].fitAddon.fit()});
-  });
-  document.addEventListener('mouseup',function(){
+  }
+  function endDrag() {
     if(!dragging) return;
     dragging.handle.classList.remove('dragging');
     document.body.classList.remove('resizing','resizing-v');
     dragging=null;
     Object.keys(panes).forEach(function(k){panes[k].fitAddon.fit()});
+  }
+  // Mouse events
+  document.addEventListener('mousedown',function(e){
+    if(!e.target.classList.contains('split-handle')) return;
+    e.preventDefault(); startDrag(e.target, e.clientX, e.clientY);
   });
+  document.addEventListener('mousemove',function(e){ moveDrag(e.clientX, e.clientY) });
+  document.addEventListener('mouseup', endDrag);
+  // Touch events
+  document.addEventListener('touchstart',function(e){
+    if(!e.target.classList.contains('split-handle')) return;
+    e.preventDefault(); var t=e.touches[0]; startDrag(e.target, t.clientX, t.clientY);
+  }, {passive:false});
+  document.addEventListener('touchmove',function(e){
+    if(!dragging) return; e.preventDefault(); var t=e.touches[0]; moveDrag(t.clientX, t.clientY);
+  }, {passive:false});
+  document.addEventListener('touchend', endDrag);
+  document.addEventListener('touchcancel', endDrag);
 })();
 
 // ── Keyboard shortcuts ──────────────────────────────────────────────
+function cyclePanes(reverse) {
+  var ids = Object.keys(panes);
+  if (ids.length < 2) return;
+  var idx = ids.indexOf(activeId);
+  if (reverse) idx = (idx - 1 + ids.length) % ids.length;
+  else idx = (idx + 1) % ids.length;
+  activatePane(ids[idx]);
+}
 document.addEventListener('keydown', function(e) {
   if(e.ctrlKey&&e.shiftKey&&e.key==='F'){e.preventDefault();toggleSearch()}
   if(e.ctrlKey&&!e.shiftKey&&(e.key==='='||e.key==='+')){e.preventDefault();zoomIn()}
   if(e.ctrlKey&&!e.shiftKey&&e.key==='-'){e.preventDefault();zoomOut()}
   if(e.key==='F11'){e.preventDefault();toggleFullscreen()}
+  // Ctrl+Tab / Ctrl+Shift+Tab to switch panes
+  if(e.ctrlKey&&e.key==='Tab'){e.preventDefault();cyclePanes(e.shiftKey)}
 });
 
 // ── Enter to connect ────────────────────────────────────────────────
 document.querySelector('.panel').addEventListener('keydown', function(e) {
   if(e.key==='Enter'&&e.target.matches('input:not([type=checkbox])')) doConnect();
 });
+
+// ── Session restore ─────────────────────────────────────────────────
+function tryRestoreSessions() {
+  var saved = loadSessions();
+  var keys = Object.keys(saved);
+  if (!keys.length) return false;
+  var first = saved[keys[0]];
+  var p = panes[Object.keys(panes)[0]];
+  if (!p || !first.sid) return false;
+  p.label = first.label || '';
+  p.connectBody = first.connectBody || null;
+  p.sid = first.sid;
+  var labelEl = p.el.querySelector('[data-pane-label]');
+  if (labelEl) labelEl.textContent = p.label;
+  setTitle(p.label);
+  p.polling = true;
+  p.pollRetries = 0;
+  startKeepalive(p);
+  resetIdleTimer(p);
+  updatePaneBadge(p);
+  pollOutput(p);
+  return true;
+}
 
 // ── Init ────────────────────────────────────────────────────────────
 (function(){
