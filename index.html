@@ -772,32 +772,21 @@ function handleUpload(id, input) {
 // Encode filename as base64 to avoid ANY shell injection
 function safeShellName(name) { return btoa(unescape(encodeURIComponent(name))); }
 
-function resolveFilename(u, name) {
-  // Resolve a free filename via background session.
-  // Filename stored in shell var via base64 — no injection possible.
+function makeRenamCmd(name) {
+  // Shell command: mv tmp → final, with auto-increment if final exists.
+  // All filenames base64-encoded to prevent injection.
   var b64 = safeShellName(name);
-  var cmd = 'f="$(echo ' + b64 + ' | base64 -d)"; ' +
-    'if [ -e "$f" ]; then b="${f%.*}"; e="${f##*.}"; ' +
-    'if [ "$b.$e" = "$f" ]; then n=1; while [ -e "$b($n).$e" ]; do n=$((n+1)); done; f="$b($n).$e"; ' +
-    'else n=1; while [ -e "$f($n)" ]; do n=$((n+1)); done; f="$f($n)"; fi; fi; ' +
-    'echo "WEBSH_NAME:$f"\n';
-  return bgSend(u, cmd).then(function() {
-    // Poll output until we find WEBSH_NAME (skip leftover MOTD)
-    var attempts = 0;
-    function poll() {
-      return delay(300).then(function() {
-        return api('output', {query: '&session_id=' + u.bgSid});
-      }).then(function(r) {
-        if (!r || !r.data) { if (++attempts < 5) return poll(); return name; }
-        var text = atob(r.data);
-        var m = text.match(/WEBSH_NAME:([^\r\n]+)/);
-        if (m) return m[1].trim();
-        if (++attempts < 5) return poll();
-        return name;
-      });
-    }
-    return poll();
-  });
+  var b64tmp = safeShellName('.' + name + '.websh.tmp');
+  // Decode names into shell vars, then increment if needed, then mv
+  return 't="$(echo ' + b64tmp + ' | base64 -d)"; ' +
+    'f="$(echo ' + b64 + ' | base64 -d)"; ' +
+    'b="${f%.*}"; e="${f##*.}"; ' +
+    'if [ "$b.$e" = "$f" ]; then ' +
+      'n=1; while [ -e "$f" ]; do f="$b($n).$e"; n=$((n+1)); done; ' +
+    'else ' +
+      'n=1; while [ -e "$f" ]; do f="${f%(*)}($n)"; n=$((n+1)); done; ' +
+    'fi; ' +
+    'mv "$t" "$f"\n';
 }
 
 function uploadNextFile(p) {
@@ -807,19 +796,16 @@ function uploadNextFile(p) {
   var file = u.files[u.fileIndex];
   u.fileOffset = 0;
   u.fileSize = file.size;
+  u.currentFile = file.name;
+  u.currentTmp = '.' + file.name + '.websh.tmp';
 
-  resolveFilename(u, file.name).then(function(finalName) {
+  var b64tmp = safeShellName(u.currentTmp);
+  // Start base64 decode into temp file (filename base64-encoded — injection-safe)
+  bgSend(u, "base64 -d > \"$(echo " + b64tmp + " | base64 -d)\"\n").then(function() {
     if (!u || u.cancelled) return;
-    u.currentFile = finalName;
-    u.currentTmp = '.' + finalName + '.websh.tmp';
-    var b64tmp = safeShellName(u.currentTmp);
-    // Start base64 decode into temp file (filename passed as base64 — injection-safe)
-    return bgSend(u, "base64 -d > \"$(echo " + b64tmp + " | base64 -d)\"\n").then(function() {
-      if (!u || u.cancelled) return;
-      return delay(50);
-    }).then(function() {
-      sendNextSlice(p, file);
-    });
+    return delay(50);
+  }).then(function() {
+    sendNextSlice(p, file);
   }).catch(function() { finishUpload(p, false); });
 }
 
@@ -832,9 +818,8 @@ function sendNextSlice(p, file) {
     bgSend(u, '\x04').then(function() {
       return delay(50);
     }).then(function() {
-      var b64tmp = safeShellName(u.currentTmp);
-      var b64final = safeShellName(u.currentFile);
-      return bgSend(u, "mv \"$(echo " + b64tmp + " | base64 -d)\" \"$(echo " + b64final + " | base64 -d)\"\n");
+      // Rename tmp → final (auto-increments if file already exists)
+      return bgSend(u, makeRenamCmd(u.currentFile));
     }).then(function() {
       u.sentBytes += file.size;
       u.fileIndex++;
