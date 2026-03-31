@@ -8,8 +8,8 @@ Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 
 ## Use cases
 
-- **Shared hosting** — you only have FTP and a PHP panel, no SSH client installed. Upload 3 files, open in browser, done.
-- **Corporate networks** — SSH port blocked by firewall, but HTTPS is open. websh tunnels SSH through standard HTTPS.
+- **Shared hosting** — no SSH client on the server? Upload 3 files via FTP, open in browser, done.
+- **Corporate networks** — SSH port blocked, but HTTPS is open? websh tunnels SSH through standard HTTPS.
 - **Chromebooks & tablets** — no native SSH client available. Any device with a browser becomes a terminal.
 - **Customer support / managed servers** — give clients browser-based access to their servers without teaching them PuTTY or terminal.
 - **Jump host UI** — put websh on a bastion host, access internal servers through it from any browser.
@@ -39,17 +39,38 @@ Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 
 ## Quick start (shared hosting)
 
-The simplest setup — **no SSH access required**:
+**No SSH access required.** Upload three files via FTP, open in browser.
 
-1. Upload `index.html`, `api.php`, and `server.py` to your web directory (e.g. via FTP)
-2. Open `https://your-host/console/index.html` in a browser
+A typical shared hosting directory structure:
 
-That's it. The PHP proxy starts the Python backend automatically on first request.
+```
+/home/user/
+  example.com/              ← site root
+    websh.json              ← config (OUTSIDE www — not accessible via HTTP)
+    www/                    ← web root (public)
+      console/
+        index.html          ← frontend
+        api.php             ← PHP proxy
+        server.py           ← backend (auto-started by api.php)
+```
 
-## Server-side connections
+**Steps:**
 
-You can pre-configure connections in a JSON file so users don't need to enter
-credentials. Create `websh.json`:
+1. Create a folder in your web root (e.g. `www/console/`)
+2. Upload `index.html`, `api.php`, and `server.py` there
+3. Open `https://your-host/console/` in a browser
+
+That's it. `api.php` starts `server.py` automatically on the first request.
+
+> **Path details:** `api.php` looks for `websh.json` two directories up from itself
+> (i.e. the site root, above `www/`). This works for most hosting providers.
+> If your layout is different, set the `WEBSH_CONFIG` environment variable
+> or edit the path in `api.php` line 38.
+
+## Server-side connections (optional)
+
+Pre-configure connections so users just click to connect — no passwords
+on the client. Create `websh.json` in your **site root** (not in `www/`):
 
 ```json
 {
@@ -68,11 +89,9 @@ credentials. Create `websh.json`:
 
 See `websh.json.example` for a full example including SSH key auth.
 
-> **Security: place this file OUTSIDE your web root.** It contains passwords
-> and must not be accessible via HTTP. The default path is two directories up
-> from `api.php` (e.g. if websh is in `/www/console/`, the config goes in `/`
-> — the site root above `www/`). Set a custom path with the `WEBSH_CONFIG`
-> environment variable.
+> **This file contains passwords — keep it outside the web root.**
+> It must not be accessible via HTTP. If your hosting layout doesn't match
+> the diagram above, set the `WEBSH_CONFIG` environment variable.
 
 ### Restrict mode
 
