@@ -782,14 +782,21 @@ function resolveFilename(u, name) {
     'else n=1; while [ -e "$f($n)" ]; do n=$((n+1)); done; f="$f($n)"; fi; fi; ' +
     'echo "WEBSH_NAME:$f"\n';
   return bgSend(u, cmd).then(function() {
-    return delay(500);
-  }).then(function() {
-    return api('output', {query: '&session_id=' + u.bgSid});
-  }).then(function(r) {
-    if (!r || !r.data) return name;
-    var text = atob(r.data);
-    var m = text.match(/WEBSH_NAME:([^\r\n]+)/);
-    return m ? m[1].trim() : name;
+    // Poll output until we find WEBSH_NAME (skip leftover MOTD)
+    var attempts = 0;
+    function poll() {
+      return delay(300).then(function() {
+        return api('output', {query: '&session_id=' + u.bgSid});
+      }).then(function(r) {
+        if (!r || !r.data) { if (++attempts < 5) return poll(); return name; }
+        var text = atob(r.data);
+        var m = text.match(/WEBSH_NAME:([^\r\n]+)/);
+        if (m) return m[1].trim();
+        if (++attempts < 5) return poll();
+        return name;
+      });
+    }
+    return poll();
   });
 }
 
