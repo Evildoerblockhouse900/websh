@@ -6,6 +6,16 @@ Lightweight web-based SSH terminal. Three files, zero dependencies.
 Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 ```
 
+## Use cases
+
+- **Shared hosting** — you only have FTP and a PHP panel, no SSH client installed. Upload 3 files, open in browser, done.
+- **Corporate networks** — SSH port blocked by firewall, but HTTPS is open. websh tunnels SSH through standard HTTPS.
+- **Chromebooks & tablets** — no native SSH client available. Any device with a browser becomes a terminal.
+- **Customer support / managed servers** — give clients browser-based access to their servers without teaching them PuTTY or terminal.
+- **Jump host UI** — put websh on a bastion host, access internal servers through it from any browser.
+- **Emergency access** — your laptop died, you're at a friend's computer, you need to restart a service. Open a URL, connect.
+- **Teaching & workshops** — provide students with browser-based terminal access, no local setup required.
+
 ## Features
 
 - Full terminal emulator in the browser ([xterm.js](https://xtermjs.org/))
