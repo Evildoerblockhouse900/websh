@@ -13,7 +13,7 @@ Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 - **Chromebooks & tablets** — no native SSH client available. Any device with a browser becomes a terminal.
 - **Customer support / managed servers** — give clients browser-based access to their servers without teaching them PuTTY or terminal.
 - **Jump host UI** — put websh on a bastion host, access internal servers through it from any browser.
-- **Emergency access** — your laptop died, you're at a friend's computer, you need to restart a service. Open a URL, connect.
+- **Emergency access** — any browser, any computer, just open a URL and connect.
 - **Teaching & workshops** — provide students with browser-based terminal access, no local setup required.
 
 ## Features
