@@ -774,24 +774,21 @@ function safeShellName(name) { return btoa(unescape(encodeURIComponent(name))); 
 
 function resolveFilename(u, name) {
   // Resolve a free filename via background session.
-  // Filename passed as base64 — no shell injection possible.
-  var b64name = safeShellName(name);
-  var script =
-    'import os,sys,base64\n' +
-    'f=base64.b64decode(sys.argv[1]).decode("utf-8")\n' +
-    'b,e=os.path.splitext(f);n=1\n' +
-    'while os.path.exists(f):\n' +
-    ' f=b+"("+str(n)+")"+e;n+=1\n' +
-    'print("WEBSH_NAME:"+f)\n';
-  var cmd = "python3 - " + b64name + " <<'WEBSH_SCRIPT_EOF'\n" + script + "WEBSH_SCRIPT_EOF\n";
+  // Filename stored in shell var via base64 — no injection possible.
+  var b64 = safeShellName(name);
+  var cmd = 'f="$(echo ' + b64 + ' | base64 -d)"; ' +
+    'if [ -e "$f" ]; then b="${f%.*}"; e="${f##*.}"; ' +
+    'if [ "$b.$e" = "$f" ]; then n=1; while [ -e "$b($n).$e" ]; do n=$((n+1)); done; f="$b($n).$e"; ' +
+    'else n=1; while [ -e "$f($n)" ]; do n=$((n+1)); done; f="$f($n)"; fi; fi; ' +
+    'echo "WEBSH_NAME:$f"\n';
   return bgSend(u, cmd).then(function() {
-    return delay(300);
+    return delay(500);
   }).then(function() {
     return api('output', {query: '&session_id=' + u.bgSid});
   }).then(function(r) {
     if (!r || !r.data) return name;
     var text = atob(r.data);
-    var m = text.match(/WEBSH_NAME:(.+)/);
+    var m = text.match(/WEBSH_NAME:([^\r\n]+)/);
     return m ? m[1].trim() : name;
   });
 }
@@ -870,7 +867,13 @@ function showUploadProgress(p) {
   var label = p.el.querySelector('[data-pane-label]');
   var prog = p.el.querySelector('[data-upload-progress]');
   if (label) label.classList.add('h');
-  if (prog) prog.classList.remove('h');
+  if (prog) {
+    // Reset state from previous operation
+    prog.querySelector('.upload-progress-bar').style.width = '0%';
+    prog.querySelector('.upload-progress-bar').style.background = '';
+    prog.querySelector('.upload-progress-text').textContent = '';
+    prog.classList.remove('h');
+  }
 }
 
 function hideUploadProgress(p) {
@@ -972,7 +975,7 @@ function triggerDownload(id) {
   var p = panes[id];
   if (!p || !p.sid || p.upload || p.download || !p.connectBody) return;
   // Use terminal selection as filename, or prompt
-  var sel = p.term.getSelection().trim();
+  var sel = (p.term.getSelection() || '').trim().replace(/^['"]|['"]$/g, '');
   if (sel && sel.indexOf('\n') === -1 && sel.length < 256) {
     startDownload(p, sel);
   } else {
