@@ -228,6 +228,7 @@ class SSHSession(object):
         if self._key_file:
             ssh_cmd.extend(["-i", self._key_file])
 
+        ssh_cmd.append("--")
         ssh_cmd.append(host)
 
         pid, fd = pty.fork()
@@ -353,14 +354,25 @@ class SSHSession(object):
             os.close(self.master_fd)
         except Exception:
             pass
+        # SIGTERM, wait briefly, SIGKILL if still alive, then reap
         try:
             os.kill(self.pid, signal.SIGTERM)
         except Exception:
             pass
-        try:
-            os.waitpid(self.pid, os.WNOHANG)
-        except Exception:
-            pass
+        for _ in range(10):
+            try:
+                pid, _ = os.waitpid(self.pid, os.WNOHANG)
+                if pid != 0:
+                    break
+            except ChildProcessError:
+                break
+            time.sleep(0.05)
+        else:
+            try:
+                os.kill(self.pid, signal.SIGKILL)
+                os.waitpid(self.pid, 0)
+            except Exception:
+                pass
         if self._key_file:
             try:
                 os.unlink(self._key_file)
@@ -476,6 +488,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if not host or not username:
             self._json({"error": "host and username are required"}, 400)
+            return
+
+        # Reject values that could be interpreted as SSH flags
+        if host.startswith("-") or username.startswith("-"):
+            self._json({"error": "invalid host or username"}, 400)
             return
 
         # Enforce restrict_hosts

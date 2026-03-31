@@ -329,6 +329,24 @@ class TestHTTPApi(unittest.TestCase):
         })
         self.assertEqual(code, 400)
 
+    def test_connect_host_flag_injection(self):
+        """Host starting with dash must be rejected."""
+        body, code = self._post("/api/connect", {
+            "host": "-o ProxyCommand=evil", "username": "user",
+            "cols": 80, "rows": 24
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("invalid", body["error"])
+
+    def test_connect_username_flag_injection(self):
+        """Username starting with dash must be rejected."""
+        body, code = self._post("/api/connect", {
+            "host": "example.com", "username": "-o Something",
+            "cols": 80, "rows": 24
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("invalid", body["error"])
+
     def test_not_found(self):
         body, code = self._get("/api/nonexistent")
         self.assertEqual(code, 404)
