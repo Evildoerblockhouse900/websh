@@ -26,6 +26,8 @@ Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 - Restrict mode — limit connections to pre-configured hosts only
 - Auto-start — PHP launches the backend automatically, no SSH needed for setup
 - Saved connections (browser localStorage)
+- **File upload** — click 📎, pick files, they upload via background SSH session (atomic writes, auto-increment on name conflict)
+- **File download** — select filename in terminal, click ⬇, file downloads to your browser
 - Copy on select, right-click paste
 - Search terminal buffer (Ctrl+Shift+F)
 - Zoom (Ctrl+/-)
