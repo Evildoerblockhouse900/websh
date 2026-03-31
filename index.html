@@ -152,7 +152,7 @@
 <div id="panes"></div>
 
 <!-- Connect overlay -->
-<div id="ov" class="ov">
+<div id="ov" class="ov h">
   <div class="panel">
     <h2>websh</h2>
     <div class="slogan">Lightweight web terminal</div>
@@ -669,7 +669,11 @@ function doDisconnect() {
 
 // ── Server config ───────────────────────────────────────────────────
 function loadServerConfig() {
-  api('config').then(function(cfg){serverConfig=cfg;renderServerConnections()}).catch(function(){});
+  api('config').then(function(cfg){
+    serverConfig=cfg;renderServerConnections();showOverlay();
+  }).catch(function(){
+    showOverlay();
+  });
 }
 
 function renderServerConnections() {
