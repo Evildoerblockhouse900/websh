@@ -18,26 +18,26 @@
     .top{display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:var(--sf);border-bottom:1px solid var(--bd);flex-shrink:0;min-height:40px}
     .top-l{display:flex;align-items:center;gap:10px}
     .logo{font-size:14px;font-weight:700;letter-spacing:-.5px}
-    .badge{font-size:11px;padding:2px 8px;border-radius:12px;font-weight:500}
+    .top-slogan{font-size:11px;color:var(--dim)}
     .s-off{background:rgba(248,81,73,.15);color:var(--dg)}
     .s-wait{background:rgba(210,153,34,.15);color:var(--wn)}
     .s-on{background:rgba(63,185,80,.15);color:var(--ok)}
-    .host-label{font-size:12px;color:var(--dim)}
     .btn{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--bd);background:var(--sf);color:var(--tx);font-size:12px;cursor:pointer;transition:.15s;white-space:nowrap}
     .btn:hover{border-color:var(--dim)}
     .btn-p{background:var(--ac);border-color:var(--ac);color:#fff}
     .btn-p:hover{background:var(--ach)}
     .btn-d{border-color:var(--dg);color:var(--dg)}
     .btn-d:hover{background:rgba(248,81,73,.15)}
+    .btn-cancel{margin-left:8px}
 
-    /* ── Connect overlay ── */
+    /* ── Overlay ── */
     .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
     .ov.h{display:none}
     .panel{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:24px 28px;width:460px;max-width:95vw;max-height:90vh;overflow-y:auto}
     .panel h2{font-size:17px;margin-bottom:4px;font-weight:600}
     .slogan{font-size:12px;color:var(--dim);margin-bottom:16px}
 
-    /* ── Saved connections ── */
+    /* ── Saved / server connections ── */
     .saved-section{margin-bottom:20px}
     .saved-label{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
     .saved-list{max-height:176px;overflow-y:auto;border:1px solid var(--bd);border-radius:var(--radius)}
@@ -52,12 +52,10 @@
     .sv-actions{display:flex;gap:4px;flex-shrink:0;margin-left:8px}
     .sv-btn{padding:4px 10px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--dim);font-size:11px;cursor:pointer;transition:.15s}
     .sv-btn.del:hover{color:var(--dg);background:rgba(248,81,73,.1)}
-
     .saved-list::-webkit-scrollbar{width:6px}
     .saved-list::-webkit-scrollbar-track{background:transparent}
     .saved-list::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
 
-    /* ── Divider ── */
     .divider{display:flex;align-items:center;gap:12px;margin-bottom:16px}
     .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--bd)}
     .divider span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
@@ -68,14 +66,11 @@
     .fg input{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
     .fg input:focus{border-color:var(--ac)}
     .row{display:flex;gap:10px}.row .fg{flex:1}
-
     .save-row{display:flex;align-items:center;gap:8px;margin:12px 0 4px}
     .save-row input[type=checkbox]{accent-color:var(--ac);width:14px;height:14px;cursor:pointer}
     .save-row label{font-size:13px;color:var(--dim);cursor:pointer}
     .save-name{margin-top:6px}
     .save-name.h{display:none}
-
-    /* ── Auth tabs ── */
     .auth-tabs{display:flex;gap:0;margin-bottom:12px;border:1px solid var(--bd);border-radius:var(--radius);overflow:hidden}
     .auth-tab{flex:1;padding:6px;border:none;background:var(--bg);color:var(--dim);font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
     .auth-tab.active{background:var(--bd);color:var(--tx)}
@@ -84,20 +79,38 @@
     .fg textarea:focus{border-color:var(--ac)}
     .fg-hint{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;display:block}
     .h{display:none!important}
-
     .panel .btn-p{width:100%;padding:10px;font-size:14px;margin-top:8px}
+    .panel .btn-row{display:flex;gap:8px;margin-top:8px}
+    .panel .btn-row .btn-p{flex:1}
     .err{color:var(--dg);font-size:13px;margin-top:10px;display:none}
     .err.on{display:block}
 
-    /* ── Terminal ── */
-    .tw{flex:1;padding:2px;overflow:hidden;position:relative}
-    #terminal{width:100%;height:100%}
+    /* ── Panes ── */
+    #panes{flex:1;display:flex;overflow:hidden}
+    .pane{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;position:relative}
+    .pane.active>.pane-bar{background:var(--sf)}
+    .pane-bar{display:flex;align-items:center;gap:6px;padding:2px 8px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0}
+    .pane-badge{font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500}
+    .pane-label{font-size:11px;color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pane-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;transition:.15s}
+    .pane-btn:hover{color:var(--tx);background:rgba(255,255,255,.08)}
+    .pane-btn.close:hover{color:var(--dg)}
+    .pane-term{flex:1;overflow:hidden;padding:2px}
     .xterm-viewport::-webkit-scrollbar{width:8px}
     .xterm-viewport::-webkit-scrollbar-track{background:transparent}
     .xterm-viewport::-webkit-scrollbar-thumb{background:var(--bd);border-radius:4px}
 
+    .split-h{display:flex;flex-direction:row;flex:1;min-width:0;min-height:0}
+    .split-v{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+    .split-handle{flex-shrink:0;background:var(--bd);transition:background .15s}
+    .split-h>.split-handle{width:3px;cursor:col-resize}
+    .split-v>.split-handle{height:3px;cursor:row-resize}
+    .split-handle:hover,.split-handle.dragging{background:var(--ac)}
+    body.resizing{cursor:col-resize!important;user-select:none!important}
+    body.resizing-v{cursor:row-resize!important;user-select:none!important}
+
     /* ── Search bar ── */
-    .search-bar{position:absolute;top:4px;right:12px;display:flex;gap:4px;z-index:50;background:var(--sf);border:1px solid var(--bd);border-radius:var(--radius);padding:4px 6px;align-items:center}
+    .search-bar{position:absolute;top:28px;right:12px;display:flex;gap:4px;z-index:50;background:var(--sf);border:1px solid var(--bd);border-radius:var(--radius);padding:4px 6px;align-items:center}
     .search-bar.h{display:none}
     .search-bar input{background:var(--bg);border:1px solid var(--bd);border-radius:4px;color:var(--tx);padding:3px 8px;font-size:12px;width:200px;outline:none}
     .search-bar input:focus{border-color:var(--ac)}
@@ -110,7 +123,7 @@
     .tbtn:hover{color:var(--tx);background:rgba(255,255,255,.06)}
 
     /* ── Bell flash ── */
-    .tw.bell{animation:bellflash .15s}
+    .pane.bell{animation:bellflash .15s}
     @keyframes bellflash{0%,100%{box-shadow:none}50%{box-shadow:inset 0 0 0 2px var(--wn)}}
 
     /* ── Light theme ── */
@@ -124,29 +137,19 @@
 <div class="top">
   <div class="top-l">
     <span class="logo">websh</span>
-    <span id="badge" class="badge s-off">Disconnected</span>
-    <span id="hostLabel" class="host-label"></span>
+    <span class="top-slogan">Lightweight web terminal</span>
   </div>
   <div class="top-r">
-    <button id="btnReconn" class="btn" style="display:none" onclick="doReconnect()">Reconnect</button>
     <button class="tbtn" onclick="toggleSearch()" title="Search (Ctrl+Shift+F)" aria-label="Search">&#x1F50D;</button>
     <button class="tbtn" onclick="zoomIn()" title="Zoom in (Ctrl+Plus)" aria-label="Zoom in">A+</button>
     <button class="tbtn" onclick="zoomOut()" title="Zoom out (Ctrl+Minus)" aria-label="Zoom out">A-</button>
     <button class="tbtn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme" id="btnTheme">&#x25D1;</button>
     <button class="tbtn" onclick="toggleFullscreen()" title="Fullscreen (F11)" aria-label="Fullscreen">&#x26F6;</button>
-    <button id="btnDisc" class="btn btn-d" style="display:none" onclick="doDisconnect()">Disconnect</button>
   </div>
 </div>
 
-<!-- Terminal (behind overlay when disconnected) -->
-<div class="tw" id="tw"><div id="terminal"></div>
-  <div id="searchBar" class="search-bar h">
-    <input id="searchInput" type="text" placeholder="Search...">
-    <button onclick="searchPrev()">&#x25B2;</button>
-    <button onclick="searchNext()">&#x25BC;</button>
-    <button onclick="closeSearch()">&#x2715;</button>
-  </div>
-</div>
+<!-- Pane container -->
+<div id="panes"></div>
 
 <!-- Connect overlay -->
 <div id="ov" class="ov">
@@ -154,13 +157,11 @@
     <h2>websh</h2>
     <div class="slogan">Lightweight web terminal</div>
 
-    <!-- Server connections (from config) -->
     <div id="serverSection" class="saved-section h">
       <div class="saved-label">Server connections</div>
       <div id="serverList" class="saved-list"></div>
     </div>
 
-    <!-- Saved connections (localStorage) -->
     <div id="localSection" class="saved-section">
       <div class="saved-label">Saved connections</div>
       <div id="savedList" class="saved-list"></div>
@@ -168,7 +169,6 @@
 
     <div id="divider" class="divider"><span>Connect</span></div>
 
-    <!-- Connection form (hidden when restrict_hosts) -->
     <div id="manualForm">
     <div class="row">
       <div class="fg"><label>Host</label><input id="iH" placeholder="example.com"></div>
@@ -201,8 +201,11 @@
       <div class="fg"><label>Connection name</label><input id="iName" placeholder="my-server"></div>
     </div>
 
-    <button class="btn btn-p" onclick="doConnect()">Connect</button>
+    <div class="btn-row">
+      <button class="btn btn-p" onclick="doConnect()">Connect</button>
+    </div>
     </div><!-- /manualForm -->
+    <button id="btnCancel" class="btn btn-cancel h" onclick="cancelConnect()">Cancel</button>
     <div id="err" class="err"></div>
   </div>
 </div>
@@ -213,483 +216,29 @@
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js"></script>
 <script>
-// ── API ──────────────────────────────────────────────────────────────
-var API = location.pathname.replace(/\/[^/]*$/, '') + '/api.php';
+// ── Helpers ─────────────────────────────────────────────────────────
+function $(id){ return document.getElementById(id) }
+function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML }
 
+var API = location.pathname.replace(/\/[^/]*$/, '') + '/api.php';
 function api(action, opts) {
   opts = opts || {};
   var url = API + '?action=' + action + (opts.query || '');
   var init = {};
-  if (opts.body) {
-    init.method = 'POST';
-    init.body = JSON.stringify(opts.body);
-    init.headers = {'Content-Type': 'application/json'};
-  }
-  return fetch(url, init).then(function(r) { return r.json() });
+  if (opts.body) { init.method='POST'; init.body=JSON.stringify(opts.body); init.headers={'Content-Type':'application/json'} }
+  return fetch(url, init).then(function(r){ return r.json() });
 }
 
-// ── Terminal setup ───────────────────────────────────────────────────
-var fitAddon = new FitAddon.FitAddon();
-var term = new Terminal({
-  cursorBlink: true, cursorStyle: 'bar', fontSize: 14,
-  fontFamily: "'Menlo','Monaco','SF Mono','Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace",
-  fontWeight: 'normal', fontWeightBold: 'bold',
-  theme: {
-    background:'#0d1117', foreground:'#e6edf3', cursor:'#58a6ff', cursorAccent:'#0d1117',
-    selectionBackground:'rgba(88,166,255,0.3)',
-    black:'#484f58', red:'#ff7b72', green:'#3fb950', yellow:'#d29922',
-    blue:'#58a6ff', magenta:'#bc8cff', cyan:'#39d353', white:'#b1bac4',
-    brightBlack:'#6e7681', brightRed:'#ffa198', brightGreen:'#56d364',
-    brightYellow:'#e3b341', brightBlue:'#79c0ff', brightMagenta:'#d2a8ff',
-    brightCyan:'#56d364', brightWhite:'#f0f6fc',
-  },
-  allowProposedApi: true, scrollback: 50000,
-});
-term.loadAddon(fitAddon);
-term.loadAddon(new WebLinksAddon.WebLinksAddon());
-var u11 = new Unicode11Addon.Unicode11Addon(); term.loadAddon(u11);
-term.unicode.activeVersion = '11';
-var searchAddon = new SearchAddon.SearchAddon(); term.loadAddon(searchAddon);
-term.open(document.getElementById('terminal'));
-fitAddon.fit();
-window.addEventListener('resize', function(){ fitAddon.fit() });
-new ResizeObserver(function(){ fitAddon.fit() }).observe(document.querySelector('.tw'));
-
-// ── State ────────────────────────────────────────────────────────────
-var sid = null;
-var polling = false;
-var inputQueue = [];
-var flushTimer = null;
-var resizeTimer = null;
-var keepaliveTimer = null;
-var pollRetries = 0;
-var MAX_POLL_RETRIES = 5;
-var serverConfig = null; // loaded from /api/config
-var lastConn = null; // for reconnect
+// ── Pane management ─────────────────────────────────────────────────
+var panes = {};
+var activeId = null;
+var paneCounter = 0;
+var connectingFor = null; // pane ID the overlay is connecting for
+var serverConfig = null;
 var fontSize = 14;
-
-// ── UI helpers ───────────────────────────────────────────────────────
-function $(id){ return document.getElementById(id) }
-
-var connLabel = '';
-
-function setTitle(label) {
-  connLabel = label || '';
-  document.title = connLabel ? connLabel + ' \u2014 websh' : 'websh \u2014 Lightweight web terminal';
-}
-
-function setStatus(s) {
-  var b = $('badge');
-  b.className = 'badge ' + (s === 'connected' ? 's-on' : s === 'connecting' ? 's-wait' : 's-off');
-  b.textContent = s.charAt(0).toUpperCase() + s.slice(1);
-  $('btnDisc').style.display = s === 'connected' ? '' : 'none';
-  $('btnReconn').style.display = (s === 'disconnected' && lastConn) ? '' : 'none';
-  if (s === 'disconnected') setTitle('');
-}
-
-function showOverlay(){ $('ov').classList.remove('h'); focusFirst() }
-function hideOverlay(){ $('ov').classList.add('h') }
-function showErr(m){ var e=$('err'); e.textContent=m; e.classList.add('on') }
-function hideErr(){ $('err').classList.remove('on') }
-
-function focusFirst() {
-  if ($('manualForm').classList.contains('h')) return;
-  var el = $('iH');
-  if (!el.value) { el.focus(); return }
-  el = $('iU');
-  if (!el.value) { el.focus(); return }
-  $('iPw').focus();
-}
-
-function toggleSaveName() {
-  $('saveNameWrap').className = $('iSave').checked ? 'save-name' : 'save-name h';
-}
-
+var MAX_POLL_RETRIES = 5;
 var authMode = 'pw';
-function setAuthTab(mode) {
-  authMode = mode;
-  $('tabPw').className = 'auth-tab' + (mode === 'pw' ? ' active' : '');
-  $('tabKey').className = 'auth-tab' + (mode === 'key' ? ' active' : '');
-  $('authPw').className = mode === 'pw' ? 'fg' : 'fg h';
-  $('authKey').className = mode === 'key' ? 'fg' : 'fg h';
-}
 
-// ── Saved connections (localStorage) ─────────────────────────────────
-function loadSaved() {
-  try { return JSON.parse(localStorage.getItem('websh_connections') || '[]') }
-  catch(e) { return [] }
-}
-
-function saveSaved(list) {
-  localStorage.setItem('websh_connections', JSON.stringify(list));
-}
-
-function renderSaved() {
-  var list = loadSaved();
-  var el = $('savedList');
-  el.innerHTML = '';
-
-  $('divider').querySelector('span').textContent = list.length ? 'Or connect manually' : 'Connect';
-
-  list.forEach(function(c, i) {
-    var div = document.createElement('div');
-    div.className = 'sv';
-    div.setAttribute('data-idx', i);
-    div.innerHTML =
-      '<div class="sv-info">' +
-        '<div class="sv-name">' + esc(c.name) + '</div>' +
-        '<div class="sv-host">' + esc(c.user) + '@' + esc(c.host) + ':' + c.port + (c.key ? ' (key)' : '') + '</div>' +
-      '</div>' +
-      '<div class="sv-actions">' +
-        '<button class="sv-btn del" data-idx="' + i + '">Delete</button>' +
-      '</div>';
-    el.appendChild(div);
-  });
-
-  el.onclick = function(e) {
-    if (e.target.classList.contains('del')) {
-      var idx = parseInt(e.target.getAttribute('data-idx'));
-      list.splice(idx, 1);
-      saveSaved(list);
-      renderSaved();
-      return;
-    }
-    var row = e.target.closest('.sv');
-    if (!row) return;
-    var idx = parseInt(row.getAttribute('data-idx'));
-    if (isNaN(idx)) return;
-    connectSaved(list[idx]);
-  };
-}
-
-function connectSaved(c) {
-  hideErr();
-  lastConn = {type: 'saved', data: c};
-  var label = c.name || (c.user + '@' + c.host);
-  $('hostLabel').textContent = label;
-  setTitle(label);
-  term.reset();
-  term.focus();
-  setStatus('connecting');
-
-  var body = {host: c.host, port: c.port, username: c.user, password: c.pass || '', cols: term.cols, rows: term.rows};
-  if (c.key) body.key = c.key;
-
-  api('connect', {body: body})
-    .then(function(r) {
-      if (r.error) { showErr(r.error); setStatus('disconnected'); return }
-      if (r.alive === false) { showErr('SSH process exited immediately'); setStatus('disconnected'); return }
-      sid = r.session_id;
-      hideOverlay();
-      term.focus();
-      polling = true;
-      pollRetries = 0;
-      startKeepalive();
-      pollOutput();
-    })
-    .catch(function(e) {
-      showErr('Connection failed: ' + e.message);
-      setStatus('disconnected');
-    });
-}
-
-function esc(s) {
-  var d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-// ── Keepalive ───────────────────────────────────────────────────────
-function startKeepalive() {
-  stopKeepalive();
-  keepaliveTimer = setInterval(function() {
-    if (sid) api('ping').catch(function(){});
-  }, 30000);
-}
-
-function stopKeepalive() {
-  if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
-}
-
-// ── Polling loop ─────────────────────────────────────────────────────
-function pollOutput() {
-  if (!sid || !polling) return;
-  api('output', {query: '&session_id=' + sid}).then(function(r) {
-    pollRetries = 0;
-    if (r.data) {
-      setStatus('connected');
-      var bytes = Uint8Array.from(atob(r.data), function(c){ return c.charCodeAt(0) });
-      term.write(bytes);
-    }
-    if (r.alive === false) {
-      term.write('\r\n\x1b[90m--- connection closed ---\x1b[0m\r\n');
-      stopKeepalive();
-      setStatus('disconnected');
-      polling = false;
-      sid = null;
-      showOverlay();
-      return;
-    }
-    if (polling) pollOutput();
-  }).catch(function() {
-    pollRetries++;
-    if (pollRetries >= MAX_POLL_RETRIES) {
-      term.write('\r\n\x1b[91m--- connection lost ---\x1b[0m\r\n');
-      stopKeepalive();
-      setStatus('disconnected');
-      polling = false;
-      sid = null;
-      showOverlay();
-      return;
-    }
-    var delay = Math.min(1000 * Math.pow(2, pollRetries - 1), 10000);
-    setTimeout(function(){ if (polling) pollOutput() }, delay);
-  });
-}
-
-// ── Input batching ───────────────────────────────────────────────────
-function flushInput() {
-  if (!sid || !inputQueue.length) return;
-  var data = inputQueue.join('');
-  inputQueue = [];
-  api('input', {body: {session_id: sid, data: data}}).catch(function(){});
-}
-
-function queueInput(data) {
-  inputQueue.push(data);
-  if (!flushTimer) flushTimer = setTimeout(function(){ flushTimer = null; flushInput() }, 10);
-}
-
-// ── Connect / Disconnect ─────────────────────────────────────────────
-function doConnect() {
-  hideErr();
-  var host = $('iH').value.trim();
-  var port = parseInt($('iP').value) || 22;
-  var username = $('iU').value.trim();
-  var password = authMode === 'pw' ? $('iPw').value : $('iKeyPw').value;
-  var key = authMode === 'key' ? $('iKey').value.trim() : '';
-
-  if (!host || !username) { showErr('Host and username are required'); return }
-  if (authMode === 'pw' && !password) { showErr('Password is required'); return }
-  if (authMode === 'key' && !key) { showErr('Private key is required'); return }
-
-  // Save connection if requested
-  if ($('iSave').checked) {
-    var name = $('iName').value.trim() || (username + '@' + host);
-    var list = loadSaved();
-    var entry = {name: name, host: host, port: port, user: username, auth: authMode};
-    if (authMode === 'pw') entry.pass = password;
-    else entry.key = key;
-    list = list.filter(function(c){ return c.name !== name });
-    list.unshift(entry);
-    saveSaved(list);
-    $('iSave').checked = false;
-    toggleSaveName();
-  }
-
-  lastConn = {type: 'manual', data: {host: host, port: port, username: username, password: password, key: key}};
-  var label = username + '@' + host;
-  $('hostLabel').textContent = label;
-  setTitle(label);
-  term.reset();
-  term.focus();
-  setStatus('connecting');
-
-  var body = {host: host, port: port, username: username, password: password, cols: term.cols, rows: term.rows};
-  if (key) body.key = key;
-
-  api('connect', {body: body})
-    .then(function(r) {
-      if (r.error) { showErr(r.error); setStatus('disconnected'); return }
-      if (r.alive === false) { showErr('SSH process exited immediately'); setStatus('disconnected'); return }
-      sid = r.session_id;
-      hideOverlay();
-      term.focus();
-      polling = true;
-      pollRetries = 0;
-      startKeepalive();
-      pollOutput();
-    })
-    .catch(function(e) {
-      showErr('Connection failed: ' + e.message);
-      setStatus('disconnected');
-    });
-}
-
-function doDisconnect() {
-  polling = false;
-  stopKeepalive();
-  if (sid) {
-    api('disconnect', {body: {session_id: sid}}).catch(function(){});
-    sid = null;
-  }
-  setStatus('disconnected');
-  term.reset();
-  showOverlay();
-  renderSaved();
-}
-
-// ── Terminal events ──────────────────────────────────────────────────
-term.onData(function(d){ queueInput(d) });
-term.onBinary(function(d){ queueInput(d) });
-
-// Debounced resize — avoids flooding the server during window drag
-term.onResize(function(size) {
-  if (!sid) return;
-  if (resizeTimer) clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(function() {
-    resizeTimer = null;
-    if (sid) api('resize', {body: {session_id: sid, cols: size.cols, rows: size.rows}}).catch(function(){});
-  }, 150);
-});
-
-// ── Enter to connect in form ─────────────────────────────────────────
-document.querySelectorAll('.panel input:not([type=checkbox])').forEach(function(el) {
-  el.addEventListener('keydown', function(e){ if (e.key === 'Enter') doConnect() });
-});
-
-// ── Server config ───────────────────────────────────────────────────
-function loadServerConfig() {
-  api('config').then(function(cfg) {
-    serverConfig = cfg;
-    renderServerConnections();
-  }).catch(function(){});
-}
-
-function renderServerConnections() {
-  if (!serverConfig || !serverConfig.connections || !serverConfig.connections.length) {
-    $('serverSection').className = 'saved-section h';
-    return;
-  }
-
-  $('serverSection').className = 'saved-section';
-  var el = $('serverList');
-  el.innerHTML = '';
-
-  serverConfig.connections.forEach(function(c) {
-    var div = document.createElement('div');
-    div.className = 'sv';
-    div.setAttribute('data-name', c.name);
-    div.innerHTML =
-      '<div class="sv-info">' +
-        '<div class="sv-name">' + esc(c.name) + '</div>' +
-        '<div class="sv-host">' + esc(c.username) + '@' + esc(c.host) + ':' + c.port + '</div>' +
-      '</div>';
-    el.appendChild(div);
-  });
-
-  el.onclick = function(e) {
-    var row = e.target.closest('.sv');
-    if (!row) return;
-    connectByName(row.getAttribute('data-name'));
-  };
-
-  // If restrict_hosts — hide manual form and local saved connections
-  if (serverConfig.restrict_hosts) {
-    $('manualForm').classList.add('h');
-    $('divider').classList.add('h');
-    $('localSection').classList.add('h');
-  }
-}
-
-function connectByName(name) {
-  hideErr();
-  var c = null;
-  if (serverConfig && serverConfig.connections) {
-    for (var i = 0; i < serverConfig.connections.length; i++) {
-      if (serverConfig.connections[i].name === name) { c = serverConfig.connections[i]; break; }
-    }
-  }
-  if (!c) return;
-
-  lastConn = {type: 'name', data: name};
-  $('hostLabel').textContent = c.username + '@' + c.host;
-  setTitle(name);
-  term.reset();
-  term.focus();
-  setStatus('connecting');
-
-  api('connect', {body: {connection: name, cols: term.cols, rows: term.rows}})
-    .then(function(r) {
-      if (r.error) { showErr(r.error); setStatus('disconnected'); return }
-      if (r.alive === false) { showErr('SSH process exited immediately'); setStatus('disconnected'); return }
-      sid = r.session_id;
-      hideOverlay();
-      term.focus();
-      polling = true;
-      pollRetries = 0;
-      startKeepalive();
-      pollOutput();
-    })
-    .catch(function(e) {
-      showErr('Connection failed: ' + e.message);
-      setStatus('disconnected');
-    });
-}
-
-// ── Copy on select ──────────────────────────────────────────────────
-term.onSelectionChange(function() {
-  var sel = term.getSelection();
-  if (sel && navigator.clipboard) navigator.clipboard.writeText(sel).catch(function(){});
-});
-
-// ── Right-click paste ───────────────────────────────────────────────
-document.querySelector('.tw').addEventListener('contextmenu', function(e) {
-  e.preventDefault();
-  if (navigator.clipboard && navigator.clipboard.readText) {
-    navigator.clipboard.readText().then(function(text) {
-      if (text && sid) queueInput(text);
-    }).catch(function(){});
-  }
-});
-
-// ── Search ──────────────────────────────────────────────────────────
-function toggleSearch() {
-  var bar = $('searchBar');
-  if (bar.classList.contains('h')) { bar.classList.remove('h'); $('searchInput').focus(); }
-  else closeSearch();
-}
-function closeSearch() { $('searchBar').classList.add('h'); searchAddon.clearDecorations(); term.focus(); }
-function searchNext() { searchAddon.findNext($('searchInput').value); }
-function searchPrev() { searchAddon.findPrevious($('searchInput').value); }
-$('searchInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.shiftKey ? searchPrev() : searchNext(); }
-  if (e.key === 'Escape') closeSearch();
-});
-
-// ── Zoom ────────────────────────────────────────────────────────────
-function zoomIn() { fontSize = Math.min(fontSize + 2, 32); term.options.fontSize = fontSize; fitAddon.fit(); }
-function zoomOut() { fontSize = Math.max(fontSize - 2, 8); term.options.fontSize = fontSize; fitAddon.fit(); }
-
-// ── Reconnect ───────────────────────────────────────────────────────
-function doReconnect() {
-  if (!lastConn) return;
-  if (lastConn.type === 'saved') connectSaved(lastConn.data);
-  else if (lastConn.type === 'name') connectByName(lastConn.data);
-  else if (lastConn.type === 'manual') {
-    var d = lastConn.data;
-    $('iH').value = d.host; $('iP').value = d.port; $('iU').value = d.username;
-    $('iPw').value = d.password || '';
-    if (d.key) { setAuthTab('key'); $('iKey').value = d.key; }
-    doConnect();
-  }
-}
-
-// ── Fullscreen ──────────────────────────────────────────────────────
-function toggleFullscreen() {
-  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(function(){});
-  else document.exitFullscreen();
-}
-
-// ── Visual bell ─────────────────────────────────────────────────────
-term.onBell(function() {
-  var tw = $('tw');
-  tw.classList.remove('bell');
-  void tw.offsetWidth; // reflow to restart animation
-  tw.classList.add('bell');
-});
-
-// ── Theme toggle ────────────────────────────────────────────────────
 var darkTheme = {
   background:'#0d1117',foreground:'#e6edf3',cursor:'#58a6ff',cursorAccent:'#0d1117',
   selectionBackground:'rgba(88,166,255,0.3)',
@@ -708,33 +257,547 @@ var lightTheme = {
   brightYellow:'#bf8700',brightBlue:'#218bff',brightMagenta:'#a475f9',
   brightCyan:'#3192aa',brightWhite:'#8c959f'
 };
-function toggleTheme() {
-  var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light');
-  term.options.theme = isLight ? darkTheme : lightTheme;
-  localStorage.setItem('websh_theme', isLight ? 'dark' : 'light');
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? lightTheme : darkTheme;
 }
-// Restore saved theme
-(function() {
-  var saved = localStorage.getItem('websh_theme');
-  if (saved === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    term.options.theme = lightTheme;
+
+function createPane(container) {
+  var id = 'p' + (++paneCounter);
+  var el = document.createElement('div');
+  el.className = 'pane';
+  el.setAttribute('data-pane', id);
+  el.innerHTML =
+    '<div class="pane-bar">' +
+      '<span class="pane-badge s-off" data-pane-badge="' + id + '"></span>' +
+      '<span class="pane-label" data-pane-label="' + id + '"></span>' +
+      '<button class="pane-btn" onclick="splitPane(\'' + id + '\',\'h\')" title="Split horizontal" aria-label="Split horizontal">&#x2194;</button>' +
+      '<button class="pane-btn" onclick="splitPane(\'' + id + '\',\'v\')" title="Split vertical" aria-label="Split vertical">&#x2195;</button>' +
+      '<button class="pane-btn close" onclick="closePane(\'' + id + '\')" title="Close pane" aria-label="Close pane">&#x2715;</button>' +
+    '</div>' +
+    '<div class="pane-term"></div>' +
+    '<div class="search-bar h" data-search="' + id + '">' +
+      '<input type="text" placeholder="Search...">' +
+      '<button onclick="searchPrev()">&#x25B2;</button>' +
+      '<button onclick="searchNext()">&#x25BC;</button>' +
+      '<button onclick="closeSearch()">&#x2715;</button>' +
+    '</div>';
+  container.appendChild(el);
+
+  var termEl = el.querySelector('.pane-term');
+  var fit = new FitAddon.FitAddon();
+  var search = new SearchAddon.SearchAddon();
+  var term = new Terminal({
+    cursorBlink:true, cursorStyle:'bar', fontSize:fontSize,
+    fontFamily:"'Menlo','Monaco','SF Mono','Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace",
+    theme: currentTheme(),
+    allowProposedApi:true, scrollback:50000
+  });
+  term.loadAddon(fit);
+  term.loadAddon(new WebLinksAddon.WebLinksAddon());
+  var u = new Unicode11Addon.Unicode11Addon(); term.loadAddon(u);
+  term.unicode.activeVersion = '11';
+  term.loadAddon(search);
+  term.open(termEl);
+
+  var p = {
+    id:id, el:el, term:term, fitAddon:fit, searchAddon:search,
+    sid:null, polling:false, pollRetries:0,
+    inputQueue:[], flushTimer:null, keepaliveTimer:null,
+    label:'', resizeTimer:null
+  };
+  panes[id] = p;
+
+  // Focus tracking
+  el.addEventListener('mousedown', function(){ activatePane(id) });
+
+  // Terminal events
+  term.onData(function(d){ if(p.sid) queueInput(p,d) });
+  term.onBinary(function(d){ if(p.sid) queueInput(p,d) });
+  term.onResize(function(size) {
+    if(!p.sid) return;
+    if(p.resizeTimer) clearTimeout(p.resizeTimer);
+    p.resizeTimer = setTimeout(function(){
+      p.resizeTimer=null;
+      if(p.sid) api('resize',{body:{session_id:p.sid,cols:size.cols,rows:size.rows}}).catch(function(){});
+    }, 150);
+  });
+  term.onSelectionChange(function(){
+    var sel=term.getSelection();
+    if(sel && navigator.clipboard) navigator.clipboard.writeText(sel).catch(function(){});
+  });
+  term.onBell(function(){
+    el.classList.remove('bell'); void el.offsetWidth; el.classList.add('bell');
+  });
+
+  // Right-click paste
+  termEl.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    if(navigator.clipboard && navigator.clipboard.readText){
+      navigator.clipboard.readText().then(function(t){ if(t && p.sid) queueInput(p,t) }).catch(function(){});
+    }
+  });
+
+  // Resize observer
+  new ResizeObserver(function(){ fit.fit() }).observe(termEl);
+  setTimeout(function(){ fit.fit() }, 50);
+
+  return p;
+}
+
+function activatePane(id) {
+  if (activeId === id) return;
+  var prev = activeId ? panes[activeId] : null;
+  if (prev) prev.el.classList.remove('active');
+  activeId = id;
+  var p = panes[id];
+  if (!p) return;
+  p.el.classList.add('active');
+  updatePaneBadge(p);
+  p.term.focus();
+}
+
+function updatePaneBadge(p) {
+  var badge = p.el.querySelector('[data-pane-badge]');
+  if (!badge) return;
+  var s = p.sid ? 'connected' : 'disconnected';
+  if (p.sid && !p.polling) s = 'connecting';
+  badge.className = 'pane-badge ' + (s==='connected'?'s-on':s==='connecting'?'s-wait':'s-off');
+  badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  if (activeId === p.id) setTitle(p.label || '');
+}
+
+// ── Split / Close ───────────────────────────────────────────────────
+function splitPane(id, dir) {
+  var p = panes[id];
+  if (!p) return;
+  var parent = p.el.parentNode;
+  var wrap = document.createElement('div');
+  wrap.className = 'split-' + dir;
+  var handle = document.createElement('div');
+  handle.className = 'split-handle';
+  parent.replaceChild(wrap, p.el);
+  wrap.appendChild(p.el);
+  wrap.appendChild(handle);
+
+  // Create new pane placeholder
+  var np = createPane(wrap);
+  activatePane(np.id);
+
+  // Show overlay for new pane
+  connectingFor = np.id;
+  showOverlay();
+  $('btnCancel').classList.remove('h');
+}
+
+function cancelConnect() {
+  if (!connectingFor) return;
+  var np = panes[connectingFor];
+  if (np && !np.sid) {
+    // Undo split: remove the wrapper, put the sibling back
+    var wrap = np.el.parentNode;
+    var parent = wrap.parentNode;
+    var sibling = null;
+    for (var i=0; i<wrap.children.length; i++) {
+      var ch = wrap.children[i];
+      if (ch !== np.el && ch.classList.contains('pane')) { sibling = ch; break; }
+      if (ch !== np.el && (ch.classList.contains('split-h') || ch.classList.contains('split-v'))) { sibling = ch; break; }
+    }
+    np.term.dispose();
+    delete panes[np.id];
+    if (sibling && parent) {
+      sibling.style.flex = '';
+      parent.replaceChild(sibling, wrap);
+    }
   }
+  connectingFor = null;
+  hideOverlay();
+  $('btnCancel').classList.add('h');
+  // Activate remaining pane
+  var ids = Object.keys(panes);
+  if (ids.length) activatePane(ids[ids.length - 1]);
+}
+
+function closePane(id) {
+  var p = panes[id];
+  if (!p) return;
+  // Disconnect
+  if (p.sid) {
+    p.polling = false;
+    stopKeepalive(p);
+    api('disconnect', {body:{session_id:p.sid}}).catch(function(){});
+  }
+  p.term.dispose();
+
+  var wrap = p.el.parentNode;
+  delete panes[id];
+
+  // If no panes left, create a fresh one
+  if (!Object.keys(panes).length) {
+    wrap.parentNode.removeChild(wrap.contains(p.el) ? wrap : p.el);
+    var root = $('panes');
+    root.innerHTML = '';
+    var np = createPane(root);
+    activatePane(np.id);
+    connectingFor = np.id;
+    showOverlay();
+    $('btnCancel').classList.add('h');
+    return;
+  }
+
+  // Unwrap: replace split container with the remaining child
+  var sibling = null;
+  for (var i=0; i<wrap.children.length; i++) {
+    var ch = wrap.children[i];
+    if (ch !== p.el && !ch.classList.contains('split-handle')) { sibling = ch; break; }
+  }
+  if (sibling && wrap.parentNode) {
+    sibling.style.flex = '';
+    wrap.parentNode.replaceChild(sibling, wrap);
+  } else {
+    p.el.remove();
+  }
+
+  // Activate another pane
+  if (activeId === id) {
+    var ids = Object.keys(panes);
+    if (ids.length) activatePane(ids[0]);
+  }
+
+  // Refit all terminals after layout change
+  Object.keys(panes).forEach(function(k){ panes[k].fitAddon.fit() });
+}
+
+// ── Per-pane session helpers ────────────────────────────────────────
+function startKeepalive(p) {
+  stopKeepalive(p);
+  p.keepaliveTimer = setInterval(function(){ if(p.sid) api('ping').catch(function(){}) }, 30000);
+}
+function stopKeepalive(p) {
+  if(p.keepaliveTimer){ clearInterval(p.keepaliveTimer); p.keepaliveTimer=null }
+}
+
+function pollOutput(p) {
+  if(!p.sid || !p.polling) return;
+  api('output',{query:'&session_id='+p.sid}).then(function(r){
+    p.pollRetries=0;
+    if(r.data){
+      updatePaneBadge(p);
+      p.term.write(Uint8Array.from(atob(r.data),function(c){return c.charCodeAt(0)}));
+    }
+    if(r.alive===false){
+      p.term.write('\r\n\x1b[90m--- connection closed ---\x1b[0m\r\n');
+      stopKeepalive(p); p.polling=false; p.sid=null;
+      if(activeId===p.id) updatePaneBadge(p);
+      return;
+    }
+    if(p.polling) pollOutput(p);
+  }).catch(function(){
+    p.pollRetries++;
+    if(p.pollRetries>=MAX_POLL_RETRIES){
+      p.term.write('\r\n\x1b[91m--- connection lost ---\x1b[0m\r\n');
+      stopKeepalive(p); p.polling=false; p.sid=null;
+      if(activeId===p.id) updatePaneBadge(p);
+      return;
+    }
+    var delay=Math.min(1000*Math.pow(2,p.pollRetries-1),10000);
+    setTimeout(function(){ if(p.polling) pollOutput(p) },delay);
+  });
+}
+
+function queueInput(p, data) {
+  p.inputQueue.push(data);
+  if(!p.flushTimer) p.flushTimer = setTimeout(function(){
+    p.flushTimer=null;
+    if(!p.sid||!p.inputQueue.length) return;
+    var d=p.inputQueue.join(''); p.inputQueue=[];
+    api('input',{body:{session_id:p.sid,data:d}}).catch(function(){});
+  }, 10);
+}
+
+// ── Unified connect ─────────────────────────────────────────────────
+function connectPane(p, opts) {
+  p.label = opts.label;
+  var labelEl = p.el.querySelector('[data-pane-label]');
+  if (labelEl) labelEl.textContent = opts.label;
+  p.term.reset();
+  setTitle(opts.label);
+  updatePaneBadge(p);
+
+  api('connect', {body: opts.body})
+    .then(function(r) {
+      if (r.error) { showErr(r.error); updatePaneBadge(p); return }
+      if (r.alive === false) { showErr('SSH process exited immediately'); updatePaneBadge(p); return }
+      p.sid = r.session_id;
+      hideOverlay();
+      $('btnCancel').classList.add('h');
+      connectingFor = null;
+      p.term.focus();
+      p.polling = true;
+      p.pollRetries = 0;
+      startKeepalive(p);
+      pollOutput(p);
+    })
+    .catch(function(e) {
+      showErr('Connection failed: ' + e.message);
+      updatePaneBadge(p);
+    });
+}
+
+function targetPane() {
+  // Which pane are we connecting for?
+  if (connectingFor && panes[connectingFor]) return panes[connectingFor];
+  if (activeId && panes[activeId]) return panes[activeId];
+  return null;
+}
+
+// ── UI ──────────────────────────────────────────────────────────────
+function setTitle(label) {
+  document.title = label ? label + ' \u2014 websh' : 'websh \u2014 Lightweight web terminal';
+}
+
+
+function showOverlay(){ $('ov').classList.remove('h'); focusFirst() }
+function hideOverlay(){ $('ov').classList.add('h') }
+function showErr(m){ var e=$('err'); e.textContent=m; e.classList.add('on') }
+function hideErr(){ $('err').classList.remove('on') }
+
+function focusFirst() {
+  if($('manualForm').classList.contains('h')) return;
+  var el=$('iH'); if(!el.value){el.focus();return}
+  el=$('iU'); if(!el.value){el.focus();return}
+  $('iPw').focus();
+}
+
+function toggleSaveName() { $('saveNameWrap').className=$('iSave').checked?'save-name':'save-name h' }
+
+function setAuthTab(mode) {
+  authMode=mode;
+  $('tabPw').className='auth-tab'+(mode==='pw'?' active':'');
+  $('tabKey').className='auth-tab'+(mode==='key'?' active':'');
+  $('authPw').className=mode==='pw'?'fg':'fg h';
+  $('authKey').className=mode==='key'?'fg':'fg h';
+}
+
+// ── Saved connections (localStorage) ────────────────────────────────
+function loadSaved() { try{return JSON.parse(localStorage.getItem('websh_connections')||'[]')}catch(e){return[]} }
+function saveSaved(list) { localStorage.setItem('websh_connections',JSON.stringify(list)) }
+
+function renderSaved() {
+  var list=loadSaved(), el=$('savedList');
+  el.innerHTML='';
+  $('divider').querySelector('span').textContent=list.length?'Or connect manually':'Connect';
+  list.forEach(function(c,i){
+    var div=document.createElement('div'); div.className='sv'; div.setAttribute('data-idx',i);
+    div.innerHTML=
+      '<div class="sv-info"><div class="sv-name">'+esc(c.name)+'</div>'+
+      '<div class="sv-host">'+esc(c.user)+'@'+esc(c.host)+':'+c.port+(c.key?' (key)':'')+'</div></div>'+
+      '<div class="sv-actions"><button class="sv-btn del" data-idx="'+i+'">Delete</button></div>';
+    el.appendChild(div);
+  });
+  el.onclick=function(e){
+    if(e.target.classList.contains('del')){
+      list.splice(parseInt(e.target.getAttribute('data-idx')),1);saveSaved(list);renderSaved();return;
+    }
+    var row=e.target.closest('.sv'); if(!row) return;
+    var idx=parseInt(row.getAttribute('data-idx')); if(isNaN(idx)) return;
+    connectSaved(list[idx]);
+  };
+}
+
+function connectSaved(c) {
+  hideErr();
+  var p = targetPane(); if(!p) return;
+  var label = c.name||(c.user+'@'+c.host);
+  var body = {host:c.host,port:c.port,username:c.user,password:c.pass||'',cols:p.term.cols,rows:p.term.rows};
+  if(c.key) body.key=c.key;
+  connectPane(p, {body:body, label:label});
+}
+
+function connectByName(name) {
+  hideErr();
+  var p = targetPane(); if(!p) return;
+  var c=null;
+  if(serverConfig && serverConfig.connections){
+    for(var i=0;i<serverConfig.connections.length;i++){
+      if(serverConfig.connections[i].name===name){c=serverConfig.connections[i];break}
+    }
+  }
+  if(!c) return;
+  connectPane(p, {
+    body:{connection:name,cols:p.term.cols,rows:p.term.rows},
+    label:name
+  });
+}
+
+function doConnect() {
+  hideErr();
+  var p = targetPane(); if(!p) return;
+  var host=$('iH').value.trim(), port=parseInt($('iP').value)||22, username=$('iU').value.trim();
+  var password=authMode==='pw'?$('iPw').value:$('iKeyPw').value;
+  var key=authMode==='key'?$('iKey').value.trim():'';
+  if(!host||!username){showErr('Host and username are required');return}
+  if(authMode==='pw'&&!password){showErr('Password is required');return}
+  if(authMode==='key'&&!key){showErr('Private key is required');return}
+  if($('iSave').checked){
+    var name=$('iName').value.trim()||(username+'@'+host), list=loadSaved();
+    var entry={name:name,host:host,port:port,user:username,auth:authMode};
+    if(authMode==='pw') entry.pass=password; else entry.key=key;
+    list=list.filter(function(c){return c.name!==name}); list.unshift(entry);
+    saveSaved(list); $('iSave').checked=false; toggleSaveName();
+  }
+  var body={host:host,port:port,username:username,password:password,cols:p.term.cols,rows:p.term.rows};
+  if(key) body.key=key;
+  connectPane(p, {body:body, label:username+'@'+host});
+}
+
+function doDisconnect() {
+  var p=panes[activeId]; if(!p) return;
+  p.polling=false; stopKeepalive(p);
+  if(p.sid){api('disconnect',{body:{session_id:p.sid}}).catch(function(){});p.sid=null}
+  p.label='';
+  var labelEl=p.el.querySelector('[data-pane-label]'); if(labelEl) labelEl.textContent='';
+  updatePaneBadge(p);
+  p.term.reset();
+  connectingFor=p.id;
+  showOverlay();
+  // Show cancel only if there are other panes with active sessions
+  var hasOthers=false;
+  Object.keys(panes).forEach(function(k){if(k!==p.id && panes[k].sid) hasOthers=true});
+  $('btnCancel').className = hasOthers || Object.keys(panes).length>1 ? 'btn btn-cancel' : 'btn btn-cancel h';
+  renderSaved();
+}
+
+// ── Server config ───────────────────────────────────────────────────
+function loadServerConfig() {
+  api('config').then(function(cfg){serverConfig=cfg;renderServerConnections()}).catch(function(){});
+}
+
+function renderServerConnections() {
+  if(!serverConfig||!serverConfig.connections||!serverConfig.connections.length){$('serverSection').className='saved-section h';return}
+  $('serverSection').className='saved-section';
+  var el=$('serverList'); el.innerHTML='';
+  serverConfig.connections.forEach(function(c){
+    var div=document.createElement('div'); div.className='sv'; div.setAttribute('data-name',c.name);
+    div.innerHTML='<div class="sv-info"><div class="sv-name">'+esc(c.name)+'</div>'+
+      '<div class="sv-host">'+esc(c.username)+'@'+esc(c.host)+':'+c.port+'</div></div>';
+    el.appendChild(div);
+  });
+  el.onclick=function(e){var row=e.target.closest('.sv');if(!row)return;connectByName(row.getAttribute('data-name'))};
+  if(serverConfig.restrict_hosts){$('manualForm').classList.add('h');$('divider').classList.add('h');$('localSection').classList.add('h')}
+}
+
+// ── Search ──────────────────────────────────────────────────────────
+function activeSearch() { var p=panes[activeId]; return p?p.searchAddon:null }
+function toggleSearch() {
+  var p=panes[activeId]; if(!p) return;
+  var bar=p.el.querySelector('[data-search]');
+  if(bar.classList.contains('h')){bar.classList.remove('h');bar.querySelector('input').focus()}
+  else closeSearch();
+}
+function closeSearch(){
+  var p=panes[activeId]; if(!p) return;
+  p.el.querySelector('[data-search]').classList.add('h');
+  p.searchAddon.clearDecorations(); p.term.focus();
+}
+function searchNext(){ var s=activeSearch(); if(s){var p=panes[activeId];s.findNext(p.el.querySelector('[data-search] input').value)} }
+function searchPrev(){ var s=activeSearch(); if(s){var p=panes[activeId];s.findPrevious(p.el.querySelector('[data-search] input').value)} }
+
+// Search input events — delegated
+document.addEventListener('keydown', function(e) {
+  if(e.target.closest('[data-search]')){
+    if(e.key==='Enter'){e.shiftKey?searchPrev():searchNext()}
+    if(e.key==='Escape') closeSearch();
+  }
+});
+
+// ── Zoom ────────────────────────────────────────────────────────────
+function zoomIn(){fontSize=Math.min(fontSize+2,32);applyZoom()}
+function zoomOut(){fontSize=Math.max(fontSize-2,8);applyZoom()}
+function applyZoom(){
+  Object.keys(panes).forEach(function(k){panes[k].term.options.fontSize=fontSize;panes[k].fitAddon.fit()});
+}
+
+// ── Fullscreen ──────────────────────────────────────────────────────
+function toggleFullscreen(){
+  if(!document.fullscreenElement)document.documentElement.requestFullscreen().catch(function(){});
+  else document.exitFullscreen();
+}
+
+// ── Theme ───────────────────────────────────────────────────────────
+function toggleTheme(){
+  var isLight=document.documentElement.getAttribute('data-theme')==='light';
+  document.documentElement.setAttribute('data-theme',isLight?'dark':'light');
+  var t=isLight?darkTheme:lightTheme;
+  Object.keys(panes).forEach(function(k){panes[k].term.options.theme=t});
+  localStorage.setItem('websh_theme',isLight?'dark':'light');
+}
+
+// ── Split handle drag resize ────────────────────────────────────────
+(function(){
+  var dragging=null;
+  document.addEventListener('mousedown',function(e){
+    if(!e.target.classList.contains('split-handle')) return;
+    e.preventDefault();
+    var handle=e.target, wrap=handle.parentNode;
+    var isH=wrap.classList.contains('split-h');
+    var children=[];
+    for(var i=0;i<wrap.children.length;i++){
+      var ch=wrap.children[i];
+      if(!ch.classList.contains('split-handle')) children.push(ch);
+    }
+    if(children.length<2) return;
+    dragging={handle:handle,wrap:wrap,isH:isH,a:children[0],b:children[1]};
+    handle.classList.add('dragging');
+    document.body.classList.add(isH?'resizing':'resizing-v');
+  });
+  document.addEventListener('mousemove',function(e){
+    if(!dragging) return;
+    var rect=dragging.wrap.getBoundingClientRect();
+    var ratio;
+    if(dragging.isH){
+      ratio=(e.clientX-rect.left)/rect.width;
+    } else {
+      ratio=(e.clientY-rect.top)/rect.height;
+    }
+    ratio=Math.max(0.1,Math.min(0.9,ratio));
+    dragging.a.style.flex=ratio+'';
+    dragging.b.style.flex=(1-ratio)+'';
+    // Refit terminals in affected panes
+    Object.keys(panes).forEach(function(k){panes[k].fitAddon.fit()});
+  });
+  document.addEventListener('mouseup',function(){
+    if(!dragging) return;
+    dragging.handle.classList.remove('dragging');
+    document.body.classList.remove('resizing','resizing-v');
+    dragging=null;
+    Object.keys(panes).forEach(function(k){panes[k].fitAddon.fit()});
+  });
 })();
 
 // ── Keyboard shortcuts ──────────────────────────────────────────────
 document.addEventListener('keydown', function(e) {
-  // Ctrl+Shift+F — search
-  if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); toggleSearch(); }
-  // Ctrl+Plus / Ctrl+Minus — zoom
-  if (e.ctrlKey && !e.shiftKey && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomIn(); }
-  if (e.ctrlKey && !e.shiftKey && e.key === '-') { e.preventDefault(); zoomOut(); }
-  // F11 — fullscreen
-  if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
+  if(e.ctrlKey&&e.shiftKey&&e.key==='F'){e.preventDefault();toggleSearch()}
+  if(e.ctrlKey&&!e.shiftKey&&(e.key==='='||e.key==='+')){e.preventDefault();zoomIn()}
+  if(e.ctrlKey&&!e.shiftKey&&e.key==='-'){e.preventDefault();zoomOut()}
+  if(e.key==='F11'){e.preventDefault();toggleFullscreen()}
 });
 
-// ── Init ─────────────────────────────────────────────────────────────
+// ── Enter to connect ────────────────────────────────────────────────
+document.querySelector('.panel').addEventListener('keydown', function(e) {
+  if(e.key==='Enter'&&e.target.matches('input:not([type=checkbox])')) doConnect();
+});
+
+// ── Init ────────────────────────────────────────────────────────────
+(function(){
+  var saved=localStorage.getItem('websh_theme');
+  if(saved==='light') document.documentElement.setAttribute('data-theme','light');
+})();
+
+var rootPane = createPane($('panes'));
+activatePane(rootPane.id);
+connectingFor = rootPane.id;
+$('btnCancel').classList.add('h'); // no cancel on first connect
+
 loadServerConfig();
 renderSaved();
 focusFirst();
