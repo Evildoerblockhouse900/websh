@@ -994,34 +994,25 @@ function startDownload(p, filename) {
     return delay(2000);
   }).then(function() {
     if (!p.download || p.download.cancelled) return;
-    // Drain MOTD — poll until no more data
-    function drain() {
-      return api('output', {query: '&session_id=' + p.download.bgSid}).then(function(r) {
-        if (r && r.data) return delay(300).then(drain); // more MOTD, keep draining
-      });
-    }
-    return drain();
-  }).then(function() {
-    if (!p.download || p.download.cancelled) return;
-    // Get file size
+    // Send stat immediately (don't wait for MOTD drain — just find the marker in output)
     return bgDlSend(p, 'stat -c%s ' + sf + ' 2>/dev/null && echo WEBSH_SZ_OK || echo WEBSH_SZ_ERR\n');
   }).then(function() {
-    // Poll until we find SZ_OK or SZ_ERR
+    // Poll until we find SZ_OK or SZ_ERR (skip MOTD automatically)
+    var buf = '';
     var attempts = 0;
     function pollStat() {
-      return delay(300).then(function() {
+      return delay(500).then(function() {
         return api('output', {query: '&session_id=' + p.download.bgSid});
       }).then(function(r) {
-        if (!r || !r.data) { if (++attempts < 8) return pollStat(); finishDownload(p, false); return null; }
-        var text = atob(r.data);
-        if (text.indexOf('WEBSH_SZ_ERR') !== -1) { finishDownload(p, false, 'File not found'); return null; }
-        if (text.indexOf('WEBSH_SZ_OK') !== -1) {
-          var m = text.match(/(\d+)\s*\n/);
+        if (r && r.data) buf += atob(r.data);
+        if (buf.indexOf('WEBSH_SZ_ERR') !== -1) { finishDownload(p, false, 'File not found'); return null; }
+        if (buf.indexOf('WEBSH_SZ_OK') !== -1) {
+          var m = buf.match(/(\d+)\s*WEBSH_SZ_OK/);
           if (m) p.download.expectedSize = parseInt(m[1]);
           return 'ok';
         }
-        if (++attempts < 8) return pollStat();
-        finishDownload(p, false);
+        if (++attempts < 10) return pollStat();
+        finishDownload(p, false, 'Timeout');
         return null;
       });
     }
