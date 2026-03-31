@@ -843,6 +843,11 @@ function loadServerConfig() {
         var found = serverConfig.connections.some(function(c){return c.name===name});
         if(found) { connectByName(name); return; }
       }
+      // Auto-connect: restrict_hosts + single connection → skip overlay
+      if(serverConfig.restrict_hosts && serverConfig.connections.length === 1) {
+        connectByName(serverConfig.connections[0].name);
+        return;
+      }
       showOverlay();
     }
   }).catch(function(){
