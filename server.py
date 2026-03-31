@@ -24,10 +24,12 @@ API endpoints:
 """
 
 import base64
+import datetime
 import fcntl
 import json
 import os
 import pty
+import re
 import select
 import signal
 import struct
@@ -41,6 +43,8 @@ from collections import OrderedDict
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from threading import Thread, Lock
+
+__version__ = "0.2.0"
 
 # ─── Configuration ───────────────────────────────────────────────────
 
@@ -79,6 +83,39 @@ TERM_RESET = b"\x1b[?1049l\x1b[?25h\x1b[0m\x1bc"
 # Password prompt patterns (lowercase, checked against lowered PTY output)
 PASSWORD_PROMPTS = ("password:", "password for", "passcode:", "passphrase")
 
+# Rate limiting for /api/connect
+RATE_LIMIT_WINDOW = 60    # seconds
+RATE_LIMIT_MAX = 10       # max connect attempts per IP per window
+
+# Session ID format
+_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+
+
+def _log(level, msg):
+    ts = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    sys.stderr.write("{} [{}] {}\n".format(ts, level, msg))
+
+
+# ─── Rate limiting ──────────────────────────────────────────────────
+
+_rate_limits = {}  # IP -> list of timestamps
+_rate_lock = Lock()
+
+
+def _check_rate_limit(ip):
+    """Return True if request is allowed, False if rate-limited."""
+    now = time.time()
+    cutoff = now - RATE_LIMIT_WINDOW
+    with _rate_lock:
+        times = _rate_limits.get(ip, [])
+        times = [t for t in times if t > cutoff]
+        if len(times) >= RATE_LIMIT_MAX:
+            _rate_limits[ip] = times
+            return False
+        times.append(now)
+        _rate_limits[ip] = times
+        return True
+
 
 # ─── Config file ────────────────────────────────────────────────────
 
@@ -113,7 +150,7 @@ def load_config():
         _config_mtime = mtime
         return result
     except Exception as e:
-        sys.stderr.write("websh: failed to load config: {}\n".format(e))
+        _log("WARN", "failed to load config: {}".format(e))
         return _CONFIG_EMPTY
 
 
@@ -128,7 +165,12 @@ def config_public():
             "port": c.get("port", 22),
             "username": c.get("username", ""),
         })
-    return {"connections": safe, "restrict_hosts": cfg["restrict_hosts"]}
+    return {
+        "connections": safe,
+        "restrict_hosts": cfg["restrict_hosts"],
+        "session_timeout": SESSION_TIMEOUT,
+        "version": __version__,
+    }
 
 
 def find_config_connection(name):
@@ -174,7 +216,7 @@ class SSHSession(object):
     """Manages a single SSH connection via PTY subprocess."""
 
     def __init__(self, session_id, host, port, username, password, cols, rows,
-                 key=None):
+                 key=None, ssh_options=None):
         self.id = session_id
         self.master_fd = None
         self.pid = None
@@ -185,6 +227,7 @@ class SSHSession(object):
         self._password = password
         self._password_sent = False
         self._key_file = None
+        self._ssh_options = ssh_options or {}
 
         if key:
             self._key_file = self._write_key(key)
@@ -228,6 +271,11 @@ class SSHSession(object):
         if self._key_file:
             ssh_cmd.extend(["-i", self._key_file])
 
+        # Per-connection SSH options from config
+        for k, v in self._ssh_options.items():
+            ssh_cmd.extend(["-o", "{}={}".format(k, v)])
+
+        ssh_cmd.append("--")
         ssh_cmd.append(host)
 
         pid, fd = pty.fork()
@@ -353,14 +401,25 @@ class SSHSession(object):
             os.close(self.master_fd)
         except Exception:
             pass
+        # SIGTERM, wait briefly, SIGKILL if still alive, then reap
         try:
             os.kill(self.pid, signal.SIGTERM)
         except Exception:
             pass
-        try:
-            os.waitpid(self.pid, os.WNOHANG)
-        except Exception:
-            pass
+        for _ in range(10):
+            try:
+                pid, _ = os.waitpid(self.pid, os.WNOHANG)
+                if pid != 0:
+                    break
+            except ChildProcessError:
+                break
+            time.sleep(0.05)
+        else:
+            try:
+                os.kill(self.pid, signal.SIGKILL)
+                os.waitpid(self.pid, 0)
+            except Exception:
+                pass
         if self._key_file:
             try:
                 os.unlink(self._key_file)
@@ -377,7 +436,7 @@ def cleanup():
     with sessions_lock:
         expired = [sid for sid, s in sessions.items() if s.is_expired()]
         for sid in expired:
-            sys.stderr.write("websh: session {} expired, cleaning up\n".format(sid))
+            _log("INFO", "session {} expired, cleaning up".format(sid))
             sessions[sid].close()
             del sessions[sid]
 
@@ -439,13 +498,27 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/api/config":
             self._json(config_public())
         elif p == "/api/ping":
-            self._json({"ok": True})
+            self._json({"ok": True, "version": __version__})
         else:
             self._json({"error": "not found"}, 404)
 
     # ── Handlers ──
 
+    def _client_ip(self):
+        return self.headers.get("X-Forwarded-For", "").split(",")[0].strip() \
+               or self.client_address[0]
+
+    def _valid_sid(self, sid):
+        return bool(sid and _UUID_RE.match(sid))
+
     def _connect(self):
+        # Rate limit by IP
+        ip = self._client_ip()
+        if not _check_rate_limit(ip):
+            _log("WARN", "rate limited: {}".format(ip))
+            self._json({"error": "too many connection attempts"}, 429)
+            return
+
         try:
             body = json.loads(self._body().decode("utf-8"))
         except Exception:
@@ -457,6 +530,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # Resolve credentials: by config connection name, or from request body
         conn_name = body.get("connection", "").strip()
+        ssh_options = {}
         if conn_name:
             entry = find_config_connection(conn_name)
             if not entry:
@@ -467,6 +541,7 @@ class Handler(BaseHTTPRequestHandler):
             username = entry.get("username", "")
             password = entry.get("password", "")
             key = entry.get("key", "")
+            ssh_options = entry.get("ssh_options", {})
         else:
             host = body.get("host", "").strip()
             username = body.get("username", "").strip()
@@ -476,6 +551,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if not host or not username:
             self._json({"error": "host and username are required"}, 400)
+            return
+
+        # Reject values that could be interpreted as SSH flags
+        if host.startswith("-") or username.startswith("-"):
+            self._json({"error": "invalid host or username"}, 400)
             return
 
         # Enforce restrict_hosts
@@ -501,12 +581,13 @@ class Handler(BaseHTTPRequestHandler):
                 cols=cols,
                 rows=rows,
                 key=key,
+                ssh_options=ssh_options,
             )
             with sessions_lock:
                 sessions[sid] = session
 
             time.sleep(CONNECT_SETTLE_TIME)
-            sys.stderr.write("websh: new session {} for {}@{}:{}\n".format(
+            _log("INFO", "new session {} for {}@{}:{}".format(
                 sid, username, host, port))
             self._json({
                 "session_id": sid,
@@ -526,8 +607,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "invalid json: " + str(e)}, 400)
             return
 
+        sid = body.get("session_id", "")
+        if not self._valid_sid(sid):
+            self._json({"error": "session not found"}, 404)
+            return
         with sessions_lock:
-            session = sessions.get(body.get("session_id", ""))
+            session = sessions.get(sid)
         if not session:
             self._json({"error": "session not found"}, 404)
             return
@@ -544,6 +629,9 @@ class Handler(BaseHTTPRequestHandler):
             urllib.parse.urlparse(self.path).query)
         sid = params.get("session_id", [""])[0]
 
+        if not self._valid_sid(sid):
+            self._json({"error": "session not found"}, 404)
+            return
         with sessions_lock:
             session = sessions.get(sid)
         if not session:
@@ -574,8 +662,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "invalid json"}, 400)
             return
 
+        sid = body.get("session_id", "")
+        if not self._valid_sid(sid):
+            self._json({"error": "session not found"}, 404)
+            return
         with sessions_lock:
-            session = sessions.get(body.get("session_id", ""))
+            session = sessions.get(sid)
         if not session:
             self._json({"error": "session not found"}, 404)
             return
@@ -592,8 +684,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "invalid json"}, 400)
             return
 
+        sid = body.get("session_id", "")
         with sessions_lock:
-            session = sessions.pop(body.get("session_id", ""), None)
+            session = sessions.pop(sid, None)
         if session:
             session.close()
         self._json({"ok": True})
@@ -621,9 +714,8 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    sys.stdout.write("websh server listening on http://{}:{}\n".format(
-        HOST, PORT))
-    sys.stdout.flush()
+    _log("INFO", "websh v{} listening on http://{}:{}".format(
+        __version__, HOST, PORT))
     server.serve_forever()
 
 

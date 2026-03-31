@@ -297,11 +297,14 @@ class TestHTTPApi(unittest.TestCase):
         body, code = self._get("/api/ping")
         self.assertEqual(code, 200)
         self.assertTrue(body["ok"])
+        self.assertIn("version", body)
 
     def test_config_returns_no_secrets(self):
         body, code = self._get("/api/config")
         self.assertEqual(code, 200)
         self.assertTrue(body["restrict_hosts"])
+        self.assertIn("session_timeout", body)
+        self.assertIn("version", body)
         self.assertEqual(len(body["connections"]), 1)
         conn = body["connections"][0]
         self.assertEqual(conn["name"], "allowed")
@@ -328,6 +331,24 @@ class TestHTTPApi(unittest.TestCase):
             "host": "", "username": "", "cols": 80, "rows": 24
         })
         self.assertEqual(code, 400)
+
+    def test_connect_host_flag_injection(self):
+        """Host starting with dash must be rejected."""
+        body, code = self._post("/api/connect", {
+            "host": "-o ProxyCommand=evil", "username": "user",
+            "cols": 80, "rows": 24
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("invalid", body["error"])
+
+    def test_connect_username_flag_injection(self):
+        """Username starting with dash must be rejected."""
+        body, code = self._post("/api/connect", {
+            "host": "example.com", "username": "-o Something",
+            "cols": 80, "rows": 24
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("invalid", body["error"])
 
     def test_not_found(self):
         body, code = self._get("/api/nonexistent")
@@ -377,6 +398,37 @@ class TestHTTPApi(unittest.TestCase):
             body = json.loads(e.read().decode("utf-8"))
             code = e.code
         self.assertEqual(code, 400)
+
+
+class TestRateLimit(unittest.TestCase):
+
+    def setUp(self):
+        server._rate_limits.clear()
+
+    def test_allowed_within_limit(self):
+        for _ in range(server.RATE_LIMIT_MAX):
+            self.assertTrue(server._check_rate_limit("10.0.0.1"))
+
+    def test_blocked_over_limit(self):
+        for _ in range(server.RATE_LIMIT_MAX):
+            server._check_rate_limit("10.0.0.2")
+        self.assertFalse(server._check_rate_limit("10.0.0.2"))
+
+    def test_different_ips_independent(self):
+        for _ in range(server.RATE_LIMIT_MAX):
+            server._check_rate_limit("10.0.0.3")
+        self.assertTrue(server._check_rate_limit("10.0.0.4"))
+
+
+class TestUUIDValidation(unittest.TestCase):
+
+    def test_valid(self):
+        self.assertTrue(server._UUID_RE.match("550e8400-e29b-41d4-a716-446655440000"))
+
+    def test_invalid(self):
+        self.assertIsNone(server._UUID_RE.match("not-a-uuid"))
+        self.assertIsNone(server._UUID_RE.match(""))
+        self.assertIsNone(server._UUID_RE.match("../etc/passwd"))
 
 
 class TestIntEnv(unittest.TestCase):

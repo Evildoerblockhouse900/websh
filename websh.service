@@ -13,6 +13,9 @@ Environment=HOST=127.0.0.1
 Environment=SESSION_TIMEOUT=300
 Environment=MAX_SESSIONS=10
 
+User=websh
+Group=websh
+
 # Security hardening
 NoNewPrivileges=yes
 ProtectSystem=strict
