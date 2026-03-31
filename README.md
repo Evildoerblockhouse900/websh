@@ -9,11 +9,18 @@ Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
 ## Features
 
 - Full terminal emulator in the browser ([xterm.js](https://xtermjs.org/))
+- **Split panes** — divide the screen horizontally or vertically, each pane is an independent SSH session
+- Draggable resize handles between panes
 - Password and SSH key authentication
 - Server-side connection config — users click to connect, no passwords on the client
 - Restrict mode — limit connections to pre-configured hosts only
 - Auto-start — PHP launches the backend automatically, no SSH needed for setup
 - Saved connections (browser localStorage)
+- Copy on select, right-click paste
+- Search terminal buffer (Ctrl+Shift+F)
+- Zoom (Ctrl+/-)
+- Dark / light theme toggle (persisted)
+- Fullscreen mode (F11)
 - Works on shared hosting — no open ports, no WebSocket, no npm
 - Python backend uses only the standard library
 - Session timeout, auto-cleanup, terminal resize
