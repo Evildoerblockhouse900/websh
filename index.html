@@ -991,36 +991,12 @@ function startDownload(p, filename) {
     if (!p.download || p.download.cancelled) return;
     if (r.error || r.alive === false) { finishDownload(p, false); return; }
     p.download.bgSid = r.session_id;
-    return delay(2000);
+    // Wait for SSH + MOTD, then send base64 command with error marker
+    // No separate stat step — just try base64 and detect failure via marker
+    return delay(3000);
   }).then(function() {
     if (!p.download || p.download.cancelled) return;
-    // Send stat immediately (don't wait for MOTD drain — just find the marker in output)
-    return bgDlSend(p, 'stat -c%s ' + sf + ' 2>/dev/null && echo WEBSH_SZ_OK || echo WEBSH_SZ_ERR\n');
-  }).then(function() {
-    // Poll until we find SZ_OK or SZ_ERR (skip MOTD automatically)
-    var buf = '';
-    var attempts = 0;
-    function pollStat() {
-      return delay(500).then(function() {
-        return api('output', {query: '&session_id=' + p.download.bgSid});
-      }).then(function(r) {
-        if (r && r.data) buf += atob(r.data);
-        if (buf.indexOf('WEBSH_SZ_ERR') !== -1) { finishDownload(p, false, 'File not found'); return null; }
-        if (buf.indexOf('WEBSH_SZ_OK') !== -1) {
-          var m = buf.match(/(\d+)\s*WEBSH_SZ_OK/);
-          if (m) p.download.expectedSize = parseInt(m[1]);
-          return 'ok';
-        }
-        if (++attempts < 10) return pollStat();
-        finishDownload(p, false, 'Timeout');
-        return null;
-      });
-    }
-    return pollStat();
-  }).then(function(result) {
-    if (!result || !p.download || p.download.cancelled) return;
-    // Start base64 streaming
-    return bgDlSend(p, 'base64 ' + sf + '; echo WEBSH_DL_DONE\n');
+    return bgDlSend(p, 'base64 ' + sf + ' 2>/dev/null && echo WEBSH_DL_DONE || echo WEBSH_DL_ERR\n');
   }).then(function() {
     if (!p.download || p.download.cancelled) return;
     pollDownload(p);
@@ -1038,15 +1014,27 @@ function pollDownload(p) {
       var chunk = atob(r.data);
       dl.b64 += chunk;
       if (dl.b64.length > MAX_DOWNLOAD_B64) { finishDownload(p, false, 'File too large'); return; }
-      updateDownloadProgress(p);
 
-      // Check if done
+      // Check for error (file not found)
+      if (dl.b64.indexOf('WEBSH_DL_ERR') !== -1) { finishDownload(p, false, 'File not found'); return; }
+
+      // Check if done — extract only the base64 content (skip MOTD/prompts)
       var doneIdx = dl.b64.indexOf('WEBSH_DL_DONE');
       if (doneIdx !== -1) {
-        dl.b64 = dl.b64.substring(0, doneIdx).trim();
+        // base64 output is pure [A-Za-z0-9+/=\n] — extract it
+        var raw = dl.b64.substring(0, doneIdx);
+        // Find start of actual base64 (after MOTD/prompt) — look for first long base64 line
+        var lines = raw.split('\n');
+        var b64lines = [];
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (line && /^[A-Za-z0-9+/=]+$/.test(line)) b64lines.push(line);
+        }
+        dl.b64 = b64lines.join('');
         saveDownload(p);
         return;
       }
+      updateDownloadProgress(p);
     }
     if (r.alive === false) { finishDownload(p, false); return; }
     pollDownload(p);
