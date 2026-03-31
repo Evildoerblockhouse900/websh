@@ -76,6 +76,9 @@ OUTPUT_BUF_KEEP = 524288      # keep last 512 KB on truncation
 # Terminal reset sequence: exit alt screen, show cursor, reset attrs, full reset
 TERM_RESET = b"\x1b[?1049l\x1b[?25h\x1b[0m\x1bc"
 
+# Password prompt patterns (lowercase, checked against lowered PTY output)
+PASSWORD_PROMPTS = ("password:", "password for", "passcode:", "passphrase")
+
 
 # ─── Config file ────────────────────────────────────────────────────
 
@@ -191,9 +194,6 @@ class SSHSession(object):
         self._reader = Thread(target=self._read_loop, daemon=True)
         self._reader.start()
 
-    def _clear_password(self):
-        """Wipe password from memory once it has been sent."""
-        self._password = None
 
     @staticmethod
     def _write_key(key_data):
@@ -268,8 +268,7 @@ class SSHSession(object):
                     # Auto-type password on prompt
                     if self._password and not self._password_sent:
                         text = data.decode("latin-1", errors="replace").lower()
-                        if ("password:" in text or "password for" in text
-                                or "passcode:" in text or "passphrase" in text):
+                        if any(p in text for p in PASSWORD_PROMPTS):
                             time.sleep(0.1)
                             try:
                                 os.write(self.master_fd,
@@ -277,7 +276,7 @@ class SSHSession(object):
                             except OSError:
                                 break
                             self._password_sent = True
-                            self._clear_password()
+                            self._password = None
 
                     with self.buf_lock:
                         self.output_buf += data
