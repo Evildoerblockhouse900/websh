@@ -431,9 +431,8 @@ function closePane(id) {
   var wrap = p.el.parentNode;
   delete panes[id];
 
-  // If no panes left, create a fresh one
+  // If no panes left, create a fresh one and show auth overlay
   if (!Object.keys(panes).length) {
-    wrap.parentNode.removeChild(wrap.contains(p.el) ? wrap : p.el);
     var root = $('panes');
     root.innerHTML = '';
     var np = createPane(root);
@@ -441,6 +440,7 @@ function closePane(id) {
     connectingFor = np.id;
     showOverlay();
     $('btnCancel').classList.add('h');
+    renderSaved();
     return;
   }
 
