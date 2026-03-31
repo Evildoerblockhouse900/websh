@@ -341,6 +341,13 @@ class SSHSession(object):
         self._set_winsize(cols, rows)
 
     def close(self):
+        # Clean up upload temp files before killing the session
+        try:
+            os.write(self.master_fd,
+                     b"\x03\nrm -f *.websh.tmp 2>/dev/null\n")
+            time.sleep(0.2)
+        except Exception:
+            pass
         self.alive = False
         try:
             os.close(self.master_fd)

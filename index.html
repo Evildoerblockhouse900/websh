@@ -94,7 +94,14 @@
     .pane-label{font-size:11px;color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .pane-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;transition:.15s}
     .pane-btn:hover{color:var(--tx);background:rgba(255,255,255,.08)}
+    .pane-btn:disabled{opacity:.3;cursor:default;pointer-events:none}
     .pane-btn.close:hover{color:var(--dg)}
+    .upload-progress{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+    .upload-progress-track{flex:1;height:14px;background:var(--bg);border-radius:7px;border:1px solid var(--bd);overflow:hidden;position:relative}
+    .upload-progress-bar{height:100%;background:var(--ac);border-radius:7px;transition:width .15s;width:0%}
+    .upload-progress-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+    .upload-progress-cancel{background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;transition:.15s;flex-shrink:0}
+    .upload-progress-cancel:hover{color:var(--dg);background:rgba(248,81,73,.1)}
     .pane-term{flex:1;overflow:hidden;padding:2px}
     .xterm-viewport::-webkit-scrollbar{width:8px}
     .xterm-viewport::-webkit-scrollbar-track{background:transparent}
@@ -270,6 +277,14 @@ function createPane(container) {
     '<div class="pane-bar">' +
       '<span class="pane-badge s-off" data-pane-badge="' + id + '"></span>' +
       '<span class="pane-label" data-pane-label="' + id + '"></span>' +
+      '<div class="upload-progress h" data-upload-progress="' + id + '">' +
+        '<div class="upload-progress-track"><div class="upload-progress-bar"></div>' +
+        '<div class="upload-progress-text"></div></div>' +
+        '<button class="upload-progress-cancel" onclick="cancelTransfer(\'' + id + '\')" title="Cancel" aria-label="Cancel transfer">&#x2715;</button>' +
+      '</div>' +
+      '<button class="pane-btn" onclick="triggerUpload(\'' + id + '\')" title="Upload file" aria-label="Upload file" data-upload-btn="' + id + '" disabled>&#x2B06;</button>' +
+      '<input type="file" class="h" data-upload-input="' + id + '" multiple onchange="handleUpload(\'' + id + '\',this)">' +
+      '<button class="pane-btn" onclick="triggerDownload(\'' + id + '\')" title="Download file" aria-label="Download file" data-download-btn="' + id + '" disabled>&#x2B07;</button>' +
       '<button class="pane-btn" onclick="splitPane(\'' + id + '\',\'h\')" title="Split horizontal" aria-label="Split horizontal">&#x2194;</button>' +
       '<button class="pane-btn" onclick="splitPane(\'' + id + '\',\'v\')" title="Split vertical" aria-label="Split vertical">&#x2195;</button>' +
       '<button class="pane-btn close" onclick="closePane(\'' + id + '\')" title="Close pane" aria-label="Close pane">&#x2715;</button>' +
@@ -303,7 +318,7 @@ function createPane(container) {
     id:id, el:el, term:term, fitAddon:fit, searchAddon:search,
     sid:null, polling:false, pollRetries:0,
     inputQueue:[], flushTimer:null, keepaliveTimer:null,
-    label:'', resizeTimer:null
+    label:'', resizeTimer:null, upload:null, download:null, connectBody:null
   };
   panes[id] = p;
 
@@ -364,6 +379,11 @@ function updatePaneBadge(p) {
   badge.className = 'pane-badge ' + (s==='connected'?'s-on':s==='connecting'?'s-wait':'s-off');
   badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
   if (activeId === p.id) setTitle(p.label || '');
+  var busy = !!p.upload || !!p.download;
+  var ub = p.el.querySelector('[data-upload-btn]');
+  if (ub) ub.disabled = !p.sid || busy;
+  var db = p.el.querySelector('[data-download-btn]');
+  if (db) db.disabled = !p.sid || busy;
 }
 
 // ── Split / Close ───────────────────────────────────────────────────
@@ -420,7 +440,10 @@ function cancelConnect() {
 function closePane(id) {
   var p = panes[id];
   if (!p) return;
-  // Disconnect
+  // Cancel active transfers
+  if (p.upload) { p.upload.cancelled = true; closeUploadSession(p.upload); }
+  if (p.download) { p.download.cancelled = true; if(p.download.bgSid) api('disconnect',{body:{session_id:p.download.bgSid}}).catch(function(){}); }
+  // Disconnect main session
   if (p.sid) {
     p.polling = false;
     stopKeepalive(p);
@@ -517,6 +540,7 @@ function queueInput(p, data) {
 // ── Unified connect ─────────────────────────────────────────────────
 function connectPane(p, opts) {
   p.label = opts.label;
+  p.connectBody = opts.body; // store for background sessions (upload)
   var labelEl = p.el.querySelector('[data-pane-label]');
   if (labelEl) labelEl.textContent = opts.label;
   p.term.reset();
@@ -688,6 +712,433 @@ function renderServerConnections() {
   });
   el.onclick=function(e){var row=e.target.closest('.sv');if(!row)return;connectByName(row.getAttribute('data-name'))};
   if(serverConfig.restrict_hosts){$('manualForm').classList.add('h');$('divider').classList.add('h');$('localSection').classList.add('h')}
+}
+
+// ── File upload (background SSH session) ────────────────────────────
+var SLICE_SIZE = 32768; // 32KB file slices
+
+function delay(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+function bgSend(u, data) {
+  if (!u || !u.bgSid) return Promise.reject(new Error('no background session'));
+  return api('input', { body: { session_id: u.bgSid, data: data } });
+}
+function bgDlSend(p, data) {
+  if (!p.download || !p.download.bgSid) return Promise.reject(new Error('no background session'));
+  return api('input', { body: { session_id: p.download.bgSid, data: data } });
+}
+
+function triggerUpload(id) {
+  var p = panes[id];
+  if (!p || !p.sid || p.upload || !p.connectBody) return;
+  p.el.querySelector('[data-upload-input="' + id + '"]').click();
+}
+
+function handleUpload(id, input) {
+  var p = panes[id];
+  if (!p || !p.sid || !input.files.length || !p.connectBody) return;
+  var files = Array.prototype.slice.call(input.files);
+  input.value = '';
+  var totalSize = 0;
+  files.forEach(function(f){ totalSize += f.size });
+  p.upload = {
+    files:files, fileIndex:0, cancelled:false,
+    totalSize:totalSize, sentBytes:0, fileOffset:0, fileSize:0,
+    bgSid:null, currentFile:null
+  };
+  showUploadProgress(p);
+  updatePaneBadge(p);
+
+  // Create background SSH session with same credentials
+  var body = {};
+  for (var k in p.connectBody) body[k] = p.connectBody[k];
+  body.cols = 80; body.rows = 24;
+  api('connect', {body: body}).then(function(r) {
+    if (!p.upload || p.upload.cancelled) return;
+    if (r.error || r.alive === false) { finishUpload(p, false); return; }
+    p.upload.bgSid = r.session_id;
+    // Wait for SSH to fully connect
+    return delay(2000);
+  }).then(function() {
+    if (!p.upload || p.upload.cancelled) return;
+    // Drain initial output (MOTD etc) so it doesn't interfere
+    return api('output', {query: '&session_id=' + p.upload.bgSid});
+  }).then(function() {
+    if (!p.upload || p.upload.cancelled) return;
+    uploadNextFile(p);
+  }).catch(function() { finishUpload(p, false); });
+}
+
+// Encode filename as base64 to avoid ANY shell injection
+function safeShellName(name) { return btoa(unescape(encodeURIComponent(name))); }
+
+function resolveFilename(u, name) {
+  // Resolve a free filename via background session.
+  // Filename passed as base64 — no shell injection possible.
+  var b64name = safeShellName(name);
+  var script =
+    'import os,sys,base64\n' +
+    'f=base64.b64decode(sys.argv[1]).decode("utf-8")\n' +
+    'b,e=os.path.splitext(f);n=1\n' +
+    'while os.path.exists(f):\n' +
+    ' f=b+"("+str(n)+")"+e;n+=1\n' +
+    'print("WEBSH_NAME:"+f)\n';
+  var cmd = "python3 - " + b64name + " <<'WEBSH_SCRIPT_EOF'\n" + script + "WEBSH_SCRIPT_EOF\n";
+  return bgSend(u, cmd).then(function() {
+    return delay(300);
+  }).then(function() {
+    return api('output', {query: '&session_id=' + u.bgSid});
+  }).then(function(r) {
+    if (!r || !r.data) return name;
+    var text = atob(r.data);
+    var m = text.match(/WEBSH_NAME:(.+)/);
+    return m ? m[1].trim() : name;
+  });
+}
+
+function uploadNextFile(p) {
+  var u = p.upload;
+  if (!u || u.cancelled) return;
+  if (u.fileIndex >= u.files.length) { finishUpload(p, true); return; }
+  var file = u.files[u.fileIndex];
+  u.fileOffset = 0;
+  u.fileSize = file.size;
+
+  resolveFilename(u, file.name).then(function(finalName) {
+    if (!u || u.cancelled) return;
+    u.currentFile = finalName;
+    u.currentTmp = '.' + finalName + '.websh.tmp';
+    var b64tmp = safeShellName(u.currentTmp);
+    // Start base64 decode into temp file (filename passed as base64 — injection-safe)
+    return bgSend(u, "base64 -d > \"$(echo " + b64tmp + " | base64 -d)\"\n").then(function() {
+      if (!u || u.cancelled) return;
+      return delay(50);
+    }).then(function() {
+      sendNextSlice(p, file);
+    });
+  }).catch(function() { finishUpload(p, false); });
+}
+
+function sendNextSlice(p, file) {
+  var u = p.upload;
+  if (!u || u.cancelled || !u.bgSid) return;
+
+  if (u.fileOffset >= file.size) {
+    // Send Ctrl+D to end base64, rename tmp → final, move to next file
+    bgSend(u, '\x04').then(function() {
+      return delay(50);
+    }).then(function() {
+      var b64tmp = safeShellName(u.currentTmp);
+      var b64final = safeShellName(u.currentFile);
+      return bgSend(u, "mv \"$(echo " + b64tmp + " | base64 -d)\" \"$(echo " + b64final + " | base64 -d)\"\n");
+    }).then(function() {
+      u.sentBytes += file.size;
+      u.fileIndex++;
+      u.currentFile = null;
+      u.currentTmp = null;
+      updateUploadProgress(p);
+      return delay(100);
+    }).then(function() {
+      uploadNextFile(p);
+    }).catch(function() { finishUpload(p, false); });
+    return;
+  }
+
+  var end = Math.min(u.fileOffset + SLICE_SIZE, file.size);
+  var slice = file.slice(u.fileOffset, end);
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    if (!u || u.cancelled) return;
+    var bytes = new Uint8Array(e.target.result);
+    var binary = '';
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    var b64 = btoa(binary);
+    var lines = '';
+    for (var j = 0; j < b64.length; j += 76) lines += b64.substring(j, j + 76) + '\n';
+    bgSend(u, lines).then(function() {
+      if (!u || u.cancelled) return;
+      u.fileOffset = end;
+      updateUploadProgress(p);
+      sendNextSlice(p, file);
+    }).catch(function() { finishUpload(p, false); });
+  };
+  reader.onerror = function() { finishUpload(p, false); };
+  reader.readAsArrayBuffer(slice);
+}
+
+function showUploadProgress(p) {
+  var label = p.el.querySelector('[data-pane-label]');
+  var prog = p.el.querySelector('[data-upload-progress]');
+  if (label) label.classList.add('h');
+  if (prog) prog.classList.remove('h');
+}
+
+function hideUploadProgress(p) {
+  var label = p.el.querySelector('[data-pane-label]');
+  var prog = p.el.querySelector('[data-upload-progress]');
+  if (label) label.classList.remove('h');
+  if (prog) prog.classList.add('h');
+}
+
+function updateUploadProgress(p) {
+  if (!p.upload) return;
+  var el = p.el.querySelector('[data-upload-progress]');
+  if (!el) return;
+  var u = p.upload;
+  var total = u.files.length, done = u.fileIndex;
+  var file = done < total ? u.files[done] : null;
+  var name = file ? file.name : 'Done';
+  var bytesDone = u.sentBytes + (u.fileSize > 0 ? u.fileOffset : 0);
+  var pct = u.totalSize > 0 ? Math.min(100, Math.round(bytesDone / u.totalSize * 100)) : 0;
+  el.querySelector('.upload-progress-bar').style.width = pct + '%';
+  var prefix = total > 1 ? '(' + Math.min(done + 1, total) + '/' + total + ') ' : '';
+  el.querySelector('.upload-progress-text').textContent = prefix + name + ' ' + pct + '%';
+}
+
+function closeUploadSession(u) {
+  if (u && u.bgSid) {
+    api('disconnect', {body: {session_id: u.bgSid}}).catch(function(){});
+    u.bgSid = null;
+  }
+}
+
+function finishUpload(p, success) {
+  if (!p.upload) return;
+  var u = p.upload;
+  u.cancelled = true;
+  closeUploadSession(u);
+  var el = p.el.querySelector('[data-upload-progress]');
+  if (el) {
+    var bar = el.querySelector('.upload-progress-bar');
+    var text = el.querySelector('.upload-progress-text');
+    if (success) {
+      bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+      text.textContent = 'Upload complete';
+    } else {
+      bar.style.background = 'var(--dg)';
+      text.textContent = 'Upload failed';
+    }
+  }
+  setTimeout(function() {
+    p.upload = null;
+    hideUploadProgress(p);
+    updatePaneBadge(p);
+    if (el) el.querySelector('.upload-progress-bar').style.background = '';
+  }, 2000);
+}
+
+function cancelUpload(id) {
+  var p = panes[id];
+  if (!p || !p.upload) return;
+  var u = p.upload;
+  var fileName = u.currentFile;
+  u.cancelled = true;
+
+  // Abort base64, delete temp file, close background session
+  var tmpName = u.currentTmp;
+  if (u.bgSid) {
+    bgSend(u, '\x03\n').then(function() {
+      if (tmpName) { var b=safeShellName(tmpName); return bgSend(u, "rm -f \"$(echo " + b + " | base64 -d)\"\n"); }
+    }).then(function() {
+      return delay(100);
+    }).then(function() {
+      closeUploadSession(u);
+    }).catch(function() {
+      closeUploadSession(u);
+    });
+  }
+
+  var el = p.el.querySelector('[data-upload-progress]');
+  if (el) {
+    el.querySelector('.upload-progress-bar').style.background = 'var(--wn)';
+    el.querySelector('.upload-progress-text').textContent = 'Cancelled';
+  }
+  setTimeout(function() {
+    p.upload = null;
+    hideUploadProgress(p);
+    updatePaneBadge(p);
+    if (el) el.querySelector('.upload-progress-bar').style.background = '';
+  }, 2000);
+}
+
+function cancelTransfer(id) {
+  var p = panes[id];
+  if (p && p.upload) cancelUpload(id);
+  else if (p && p.download) cancelDownload(id);
+}
+
+// ── File download (background SSH session) ─────────────────────────
+function triggerDownload(id) {
+  var p = panes[id];
+  if (!p || !p.sid || p.upload || p.download || !p.connectBody) return;
+  // Use terminal selection as filename, or prompt
+  var sel = p.term.getSelection().trim();
+  if (sel && sel.indexOf('\n') === -1 && sel.length < 256) {
+    startDownload(p, sel);
+  } else {
+    var name = prompt('Filename to download:');
+    if (name && name.trim()) startDownload(p, name.trim());
+  }
+}
+
+function startDownload(p, filename) {
+  var b64name = safeShellName(filename);
+  var sf = '"$(echo ' + b64name + ' | base64 -d)"'; // injection-safe shell ref
+  p.download = { cancelled: false, bgSid: null, filename: filename, b64: '', expectedSize: 0 };
+  showUploadProgress(p);
+  updatePaneBadge(p);
+
+  // Create background session
+  var body = {};
+  for (var k in p.connectBody) body[k] = p.connectBody[k];
+  body.cols = 80; body.rows = 24;
+  api('connect', {body: body}).then(function(r) {
+    if (!p.download || p.download.cancelled) return;
+    if (r.error || r.alive === false) { finishDownload(p, false); return; }
+    p.download.bgSid = r.session_id;
+    return delay(2000);
+  }).then(function() {
+    if (!p.download || p.download.cancelled) return;
+    // Drain MOTD
+    return api('output', {query: '&session_id=' + p.download.bgSid});
+  }).then(function() {
+    if (!p.download || p.download.cancelled) return;
+    // Get file size
+    return bgDlSend(p, 'stat -c%s ' + sf + ' 2>/dev/null && echo WEBSH_SZ_OK || echo WEBSH_SZ_ERR\n');
+  }).then(function() {
+    return delay(300);
+  }).then(function() {
+    return api('output', {query: '&session_id=' + p.download.bgSid});
+  }).then(function(r) {
+    if (!p.download || p.download.cancelled) return;
+    if (!r.data) { finishDownload(p, false); return; }
+    var text = atob(r.data);
+    if (text.indexOf('WEBSH_SZ_ERR') !== -1) {
+      finishDownload(p, false, 'File not found');
+      return;
+    }
+    var sizeMatch = text.match(/(\d+)\s*\n/);
+    if (sizeMatch) p.download.expectedSize = parseInt(sizeMatch[1]);
+    // Start base64 streaming
+    return bgDlSend(p, 'base64 ' + sf + '; echo WEBSH_DL_DONE\n');
+  }).then(function() {
+    if (!p.download || p.download.cancelled) return;
+    pollDownload(p);
+  }).catch(function() { finishDownload(p, false); });
+}
+
+var MAX_DOWNLOAD_B64 = 50 * 1024 * 1024; // ~37MB file limit
+
+function pollDownload(p) {
+  var dl = p.download;
+  if (!dl || dl.cancelled || !dl.bgSid) return;
+  api('output', {query: '&session_id=' + dl.bgSid}).then(function(r) {
+    if (!dl || dl.cancelled) return;
+    if (r.data) {
+      var chunk = atob(r.data);
+      dl.b64 += chunk;
+      if (dl.b64.length > MAX_DOWNLOAD_B64) { finishDownload(p, false, 'File too large'); return; }
+      updateDownloadProgress(p);
+
+      // Check if done
+      var doneIdx = dl.b64.indexOf('WEBSH_DL_DONE');
+      if (doneIdx !== -1) {
+        dl.b64 = dl.b64.substring(0, doneIdx).trim();
+        saveDownload(p);
+        return;
+      }
+    }
+    if (r.alive === false) { finishDownload(p, false); return; }
+    pollDownload(p);
+  }).catch(function() {
+    finishDownload(p, false);
+  });
+}
+
+function updateDownloadProgress(p) {
+  var dl = p.download;
+  if (!dl) return;
+  var el = p.el.querySelector('[data-upload-progress]');
+  if (!el) return;
+  var pct = 0;
+  if (dl.expectedSize > 0) {
+    var expectedB64 = Math.ceil(dl.expectedSize / 3) * 4 + dl.expectedSize / 76;
+    pct = Math.min(99, Math.round(dl.b64.length / expectedB64 * 100));
+  }
+  el.querySelector('.upload-progress-bar').style.width = pct + '%';
+  el.querySelector('.upload-progress-text').textContent = dl.filename + ' ' + pct + '%';
+}
+
+function saveDownload(p) {
+  var dl = p.download;
+  if (!dl) return;
+  try {
+    // Decode base64 — remove any whitespace/newlines
+    var clean = dl.b64.replace(/\s/g, '');
+    var binary = atob(clean);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var blob = new Blob([bytes], {type: 'application/octet-stream'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = dl.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    finishDownload(p, true);
+  } catch(e) {
+    finishDownload(p, false, 'Decode error');
+  }
+}
+
+function finishDownload(p, success, msg) {
+  var dl = p.download;
+  if (!dl) return;
+  dl.cancelled = true;
+  if (dl.bgSid) {
+    api('disconnect', {body: {session_id: dl.bgSid}}).catch(function(){});
+    dl.bgSid = null;
+  }
+  var el = p.el.querySelector('[data-upload-progress]');
+  if (el) {
+    var bar = el.querySelector('.upload-progress-bar');
+    var text = el.querySelector('.upload-progress-text');
+    if (success) {
+      bar.style.width = '100%'; bar.style.background = 'var(--ok)';
+      text.textContent = 'Download complete';
+    } else {
+      bar.style.background = 'var(--dg)';
+      text.textContent = msg || 'Download failed';
+    }
+  }
+  setTimeout(function() {
+    p.download = null;
+    hideUploadProgress(p);
+    updatePaneBadge(p);
+    if (el) el.querySelector('.upload-progress-bar').style.background = '';
+  }, 2000);
+}
+
+function cancelDownload(id) {
+  var p = panes[id];
+  if (!p || !p.download) return;
+  p.download.cancelled = true;
+  if (p.download.bgSid) {
+    api('disconnect', {body: {session_id: p.download.bgSid}}).catch(function(){});
+    p.download.bgSid = null;
+  }
+  var el = p.el.querySelector('[data-upload-progress]');
+  if (el) {
+    el.querySelector('.upload-progress-bar').style.background = 'var(--wn)';
+    el.querySelector('.upload-progress-text').textContent = 'Cancelled';
+  }
+  setTimeout(function() {
+    p.download = null;
+    hideUploadProgress(p);
+    updatePaneBadge(p);
+    if (el) el.querySelector('.upload-progress-bar').style.background = '';
+  }, 2000);
 }
 
 // ── Search ──────────────────────────────────────────────────────────
