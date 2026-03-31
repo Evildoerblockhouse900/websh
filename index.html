@@ -332,7 +332,7 @@ function createPane(container) {
 
   var p = {
     id:id, el:el, term:term, fitAddon:fit, searchAddon:search,
-    sid:null, polling:false, pollRetries:0,
+    sid:null, connecting:false, polling:false, pollRetries:0,
     inputQueue:[], flushTimer:null, keepaliveTimer:null,
     label:'', resizeTimer:null, upload:null, download:null, connectBody:null,
     idleTimer:null, idleWarnEl:null
@@ -391,8 +391,7 @@ function activatePane(id) {
 function updatePaneBadge(p) {
   var badge = p.el.querySelector('[data-pane-badge]');
   if (!badge) return;
-  var s = p.sid ? 'connected' : 'disconnected';
-  if (p.sid && !p.polling) s = 'connecting';
+  var s = p.sid ? 'connected' : (p.connecting ? 'connecting' : 'disconnected');
   badge.className = 'pane-badge ' + (s==='connected'?'s-on':s==='connecting'?'s-wait':'s-off');
   badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
   if (activeId === p.id) setTitle(p.label || '');
@@ -420,10 +419,14 @@ function splitPane(id, dir) {
   var np = createPane(wrap);
   activatePane(np.id);
 
-  // Show overlay for new pane
-  connectingFor = np.id;
-  showOverlay();
-  $('btnCancel').classList.remove('h');
+  // Auto-connect if single restricted host, otherwise show overlay
+  if (serverConfig && serverConfig.restrict_hosts && serverConfig.connections.length === 1) {
+    connectByName(serverConfig.connections[0].name);
+  } else {
+    connectingFor = np.id;
+    showOverlay();
+    $('btnCancel').classList.remove('h');
+  }
 }
 
 function cancelConnect() {
@@ -626,6 +629,18 @@ function pollOutput(p) {
   if(!p.sid || !p.polling) return;
   api('output',{query:'&session_id='+p.sid}).then(function(r){
     p.pollRetries=0;
+    if(r.error){
+      // Session not found — stale restore or server restarted
+      console.log('poll: session error:', r.error);
+      stopKeepalive(p); clearIdleTimer(p); p.polling=false; p.sid=null; p.connecting=false;
+      clearSavedSessions();
+      updatePaneBadge(p);
+      if(p.connectBody) { connectPane(p, {body:p.connectBody, label:p.label}); }
+      else { doAutoConnect(); }
+      return;
+    }
+    p.connecting=false;
+    console.log('poll:', p.id, 'data_len:', (r.data||'').length, 'alive:', r.alive);
     if(r.data){
       updatePaneBadge(p);
       p.term.write(Uint8Array.from(atob(r.data),function(c){return c.charCodeAt(0)}));
@@ -641,6 +656,7 @@ function pollOutput(p) {
     }
     if(p.polling) pollOutput(p);
   }).catch(function(e){
+    console.error('poll error:', p.id, e);
     p.pollRetries++;
     if(p.pollRetries>=MAX_POLL_RETRIES){
       var msg = (e && e.message && e.message.indexOf('502') !== -1)
@@ -674,6 +690,7 @@ function connectPane(p, opts) {
   p.label = opts.label;
   p.connectBody = opts.body; // store for background sessions (upload)
   hideReconnectBar(p);
+  p.connecting = true;
   var labelEl = p.el.querySelector('[data-pane-label]');
   if (labelEl) labelEl.textContent = opts.label;
   p.term.reset();
@@ -682,6 +699,8 @@ function connectPane(p, opts) {
 
   api('connect', {body: opts.body})
     .then(function(r) {
+      console.log('connect result:', r);
+      p.connecting = false;
       if (r.error) { showErr(r.error); updatePaneBadge(p); return }
       if (r.alive === false) { showErr('SSH process exited immediately'); updatePaneBadge(p); return }
       p.sid = r.session_id;
@@ -697,6 +716,7 @@ function connectPane(p, opts) {
       pollOutput(p);
     })
     .catch(function(e) {
+      p.connecting = false;
       showErr('Connection failed: ' + e.message);
       updatePaneBadge(p);
     });
@@ -835,20 +855,7 @@ function loadServerConfig() {
     renderServerConnections();
     // Try to restore sessions from page reload
     if(!tryRestoreSessions()) {
-      // Check for URL anchor auto-connect: #connect=ConnectionName
-      var hash = location.hash.replace(/^#/, '');
-      var m = hash.match(/^connect=(.+)/);
-      if(m && serverConfig && serverConfig.connections) {
-        var name = decodeURIComponent(m[1]);
-        var found = serverConfig.connections.some(function(c){return c.name===name});
-        if(found) { connectByName(name); return; }
-      }
-      // Auto-connect: restrict_hosts + single connection → skip overlay
-      if(serverConfig.restrict_hosts && serverConfig.connections.length === 1) {
-        connectByName(serverConfig.connections[0].name);
-        return;
-      }
-      showOverlay();
+      doAutoConnect();
     }
   }).catch(function(){
     showOverlay();
@@ -1421,27 +1428,28 @@ document.querySelector('.panel').addEventListener('keydown', function(e) {
   if(e.key==='Enter'&&e.target.matches('input:not([type=checkbox])')) doConnect();
 });
 
-// ── Session restore ─────────────────────────────────────────────────
+// ── Auto-connect logic ──────────────────────────────────────────────
+function doAutoConnect() {
+  // URL anchor: #connect=ConnectionName
+  var hash = location.hash.replace(/^#/, '');
+  var m = hash.match(/^connect=(.+)/);
+  if (m && serverConfig && serverConfig.connections) {
+    var name = decodeURIComponent(m[1]);
+    var found = serverConfig.connections.some(function(c){return c.name===name});
+    if (found) { connectByName(name); return; }
+  }
+  // Single server connection with restrict_hosts → connect immediately
+  if (serverConfig && serverConfig.restrict_hosts && serverConfig.connections.length === 1) {
+    connectByName(serverConfig.connections[0].name);
+    return;
+  }
+  showOverlay();
+}
+
+// ── Session restore (disabled — fresh connect is more reliable) ─────
 function tryRestoreSessions() {
-  var saved = loadSessions();
-  var keys = Object.keys(saved);
-  if (!keys.length) return false;
-  var first = saved[keys[0]];
-  var p = panes[Object.keys(panes)[0]];
-  if (!p || !first.sid) return false;
-  p.label = first.label || '';
-  p.connectBody = first.connectBody || null;
-  p.sid = first.sid;
-  var labelEl = p.el.querySelector('[data-pane-label]');
-  if (labelEl) labelEl.textContent = p.label;
-  setTitle(p.label);
-  p.polling = true;
-  p.pollRetries = 0;
-  startKeepalive(p);
-  resetIdleTimer(p);
-  updatePaneBadge(p);
-  pollOutput(p);
-  return true;
+  clearSavedSessions();
+  return false;
 }
 
 // ── Init ────────────────────────────────────────────────────────────
