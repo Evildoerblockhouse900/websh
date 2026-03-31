@@ -996,6 +996,21 @@ function startDownload(p, filename) {
     return delay(3000);
   }).then(function() {
     if (!p.download || p.download.cancelled) return;
+    // Drain all MOTD output before sending command
+    function drain() {
+      return api('output', {query: '&session_id=' + p.download.bgSid}).then(function(r) {
+        if (r && r.data && atob(r.data).length > 0) return delay(200).then(drain);
+      });
+    }
+    return drain();
+  }).then(function() {
+    if (!p.download || p.download.cancelled) return;
+    // Disable echo so our command doesn't appear in output
+    return bgDlSend(p, 'stty -echo\n');
+  }).then(function() {
+    return delay(200);
+  }).then(function() {
+    if (!p.download || p.download.cancelled) return;
     return bgDlSend(p, 'base64 ' + sf + ' 2>/dev/null && echo WEBSH_DL_DONE || echo WEBSH_DL_ERR\n');
   }).then(function() {
     if (!p.download || p.download.cancelled) return;
