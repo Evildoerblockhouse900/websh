@@ -583,16 +583,17 @@ function doConnect() {
   if(!host||!username){showErr('Host and username are required');return}
   if(authMode==='pw'&&!password){showErr('Password is required');return}
   if(authMode==='key'&&!key){showErr('Private key is required');return}
+  let label = $('iName').value.trim() || (username+'@'+host);
   if($('iSave').checked){
-    let name=$('iName').value.trim()||(username+'@'+host), list=loadSaved();
-    let entry={name:name,host:host,port:port,user:username,auth:authMode};
+    let list=loadSaved();
+    let entry={name:label,host:host,port:port,user:username,auth:authMode};
     if(authMode==='pw') entry.pass=password; else entry.key=key;
-    list=list.filter(c => {return c.name!==name}); list.unshift(entry);
+    list=list.filter(c => {return c.name!==label}); list.unshift(entry);
     saveSaved(list); $('iSave').checked=false; toggleSaveName();
   }
   let body={host:host,port:port,username:username,password:password,cols:p.term.cols,rows:p.term.rows};
   if(key) body.key=key;
-  connectPane(p, {body:body, label:username+'@'+host});
+  connectPane(p, {body:body, label:label});
 }
 
 function doDisconnect() {
