@@ -1,6 +1,6 @@
 # websh
 
-Lightweight web-based SSH terminal. No build step, no server dependencies.
+Lightweight but powerful web-based SSH terminal. No build step, no server dependencies.
 
 ![websh split panes](screenshot.png)
 
