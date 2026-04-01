@@ -3,14 +3,14 @@
 Lightweight web-based SSH terminal. No build step, no server dependencies.
 
 ```
-Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
-                         or
-Browser (xterm.js) ──────────── server.py ──> ssh
+Browser (xterm.js) ──── server.py ──── ssh
 ```
 
 ## How it works
 
-The browser runs a full terminal emulator (xterm.js) and communicates with the backend via HTTP long-polling through a PHP reverse proxy. The backend manages SSH sessions as PTY subprocesses.
+The browser runs a full terminal emulator (xterm.js) and communicates with the Python backend via HTTP long-polling. The backend manages SSH sessions as PTY subprocesses and serves the frontend directly.
+
+On shared hosting where you can't run a long-lived process, an optional PHP proxy (`api.php`) auto-starts the backend and forwards requests to it.
 
 **Why not WebSocket?** Most shared hosting PHP environments don't support WebSocket. HTTP long-polling works everywhere — no open ports, no special server configuration. The trade-off is slightly higher latency compared to a native SSH client, but it's negligible for interactive use.
 
