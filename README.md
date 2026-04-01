@@ -1,9 +1,11 @@
 # websh
 
-Lightweight web-based SSH terminal. Three files, no build step, no server dependencies.
+Lightweight web-based SSH terminal. No build step, no server dependencies.
 
 ```
 Browser (xterm.js) ── HTTPS ──> api.php ──> server.py ──> ssh
+                         or
+Browser (xterm.js) ──────────── server.py ──> ssh
 ```
 
 ## How it works
@@ -58,7 +60,7 @@ The browser runs a full terminal emulator (xterm.js) and communicates with the b
 
 ## Quick start (shared hosting)
 
-**No SSH access required.** Upload three files via FTP, open in browser.
+**No SSH access required.** Upload files via FTP, open in browser.
 
 A typical shared hosting directory structure:
 
@@ -69,6 +71,7 @@ A typical shared hosting directory structure:
     www/                    <- web root (public)
       console/
         index.html          <- frontend
+        websh.js            <- frontend logic
         api.php             <- PHP proxy
         server.py           <- backend (auto-started by api.php)
 ```
@@ -76,7 +79,7 @@ A typical shared hosting directory structure:
 **Steps:**
 
 1. Create a folder in your web root (e.g. `www/console/`)
-2. Upload `index.html`, `api.php`, and `server.py` there
+2. Upload `index.html`, `websh.js`, `api.php`, and `server.py` there
 3. Open `https://your-host/console/` in a browser
 
 That's it. `api.php` starts `server.py` automatically on the first request.
@@ -172,6 +175,8 @@ Environment variables for `server.py`:
 | `SESSION_TIMEOUT` | `300` | Idle timeout in seconds |
 | `MAX_SESSIONS` | `10` | Max concurrent SSH sessions |
 | `WEBSH_CONFIG` | *(auto-detected)* | Path to `websh.json` config file |
+| `TRUSTED_PROXIES` | `127.0.0.1` | Comma-separated IPs to trust `X-Forwarded-For` from |
+| `MAX_BG_SESSIONS` | `10` | Max background SSH sessions (file upload/download) |
 
 The PHP proxy reads `WEBSH_PORT` (default `8765`) to find the backend.
 
@@ -179,7 +184,8 @@ The PHP proxy reads `WEBSH_PORT` (default `8765`) to find the backend.
 
 ### Shared hosting (PHP + Python)
 
-Upload the three files to your web directory. The backend starts automatically.
+Upload the four files (`index.html`, `websh.js`, `api.php`, `server.py`) to your web
+directory. The backend starts automatically.
 
 For manual control (e.g. custom config path):
 
@@ -187,25 +193,50 @@ For manual control (e.g. custom config path):
 WEBSH_CONFIG=/path/to/websh.json nohup python3 server.py &
 ```
 
-### Docker
+### Python only (no PHP)
+
+The backend can serve the frontend directly — no PHP or separate web server needed:
 
 ```bash
-docker build -t websh .
-docker run -d -p 8765:8765 websh
+HOST=0.0.0.0 python3 server.py
 ```
 
-Serve `index.html` via nginx/Apache and proxy `/api/` to the container. Example nginx config:
+Open `http://your-host:8765/` in a browser. The backend serves `index.html` and
+`websh.js` from the same directory as `server.py`, and handles API requests on
+the same port.
+
+Put nginx or Caddy in front for HTTPS:
 
 ```nginx
 server {
     listen 443 ssl;
     server_name ssh.example.com;
 
-    root /var/www/websh;
-    index index.html;
+    location / {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_read_timeout 60s;
+    }
+}
+```
 
-    location /api.php {
-        proxy_pass http://127.0.0.1:8765/api;
+### Docker
+
+```bash
+docker build -t websh .
+docker run -d -p 8765:8765 -e HOST=0.0.0.0 websh
+```
+
+Open `http://localhost:8765/` — the backend serves the frontend directly.
+
+For HTTPS, put a reverse proxy in front:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name ssh.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8765;
         proxy_read_timeout 60s;
     }
 }
@@ -260,20 +291,33 @@ If this is unacceptable for your use case:
 - Don't save connections in the browser — use SSH keys instead
 - Restrict access to the websh URL to trusted networks
 
+### Rate limiting & proxies
+
+Connection attempts are rate-limited to 10 per IP per minute. The client IP is
+determined from `X-Forwarded-For` **only** when the request comes from an IP
+listed in `TRUSTED_PROXIES` (default: `127.0.0.1`). Direct connections always
+use the TCP peer address — `X-Forwarded-For` cannot be spoofed.
+
+If your reverse proxy runs on a different host, add its IP:
+
+```bash
+TRUSTED_PROXIES=127.0.0.1,10.0.0.5 python3 server.py
+```
+
 ### Input validation
 
 - Host and username values starting with `-` are rejected (prevents SSH flag injection)
-- Connection attempts are rate-limited (10 per IP per minute)
 - Session IDs are validated as UUID format
 - Terminal dimensions are clamped to safe ranges
-- `MAX_SESSIONS` prevents resource exhaustion
+- `MAX_SESSIONS` limits concurrent user sessions; `MAX_BG_SESSIONS` limits file transfer sessions separately
 
 ## Project structure
 
 ```
 index.html          Frontend — xterm.js terminal + connection UI
-api.php             PHP proxy — forwards browser requests to backend
-server.py           Python backend — manages SSH sessions via PTY
+websh.js            Frontend logic — pane management, file transfer, themes
+api.php             PHP proxy — forwards browser requests to backend (optional)
+server.py           Python backend — manages SSH sessions via PTY, serves frontend
 websh.json.example  Example server-side config
 test_server.py      Tests (40 unit + integration tests)
 Dockerfile          Container deployment
