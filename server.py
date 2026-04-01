@@ -139,7 +139,7 @@ def _check_rate_limit(ip):
 
 _config_cache = None
 _config_mtime = 0
-_CONFIG_EMPTY = {"connections": [], "restrict_hosts": False}
+_CONFIG_EMPTY = {"connections": [], "restrict_hosts": False, "isolate_storage": False}
 
 
 def load_config():
@@ -163,6 +163,7 @@ def load_config():
         result = {
             "connections": conns,
             "restrict_hosts": bool(cfg.get("restrict_hosts", False)),
+            "isolate_storage": bool(cfg.get("isolate_storage", False)),
         }
         _config_cache = result
         _config_mtime = mtime
@@ -186,6 +187,7 @@ def config_public():
     return {
         "connections": safe,
         "restrict_hosts": cfg["restrict_hosts"],
+        "isolate_storage": cfg.get("isolate_storage", False),
         "session_timeout": SESSION_TIMEOUT,
         "version": __version__,
     }

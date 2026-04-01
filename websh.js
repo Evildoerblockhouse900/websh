@@ -1,5 +1,11 @@
 // websh.js — frontend logic for websh terminal
 
+// ── Storage isolation ──────────────────────────────────────────────
+// When isolate_storage is enabled, saved connections are scoped to the URL path
+// so multiple websh instances on the same origin don't share connections.
+let storagePrefix = '';
+function storageKey(name) { return storagePrefix + name; }
+
 // ── Helpers ─────────────────────────────────────────────────────────
 function $(id){ return document.getElementById(id) }
 function esc(s){ let d=document.createElement('div'); d.textContent=s; return d.innerHTML }
@@ -525,8 +531,8 @@ function setAuthTab(mode) {
 }
 
 // ── Saved connections (localStorage) ────────────────────────────────
-function loadSaved() { try{return JSON.parse(localStorage.getItem('websh_connections')||'[]')}catch(e){return[]} }
-function saveSaved(list) { localStorage.setItem('websh_connections',JSON.stringify(list)) }
+function loadSaved() { try{return JSON.parse(localStorage.getItem(storageKey('websh_connections'))||'[]')}catch(e){return[]} }
+function saveSaved(list) { localStorage.setItem(storageKey('websh_connections'),JSON.stringify(list)) }
 
 function renderSaved() {
   let list=loadSaved(), el=$('savedList');
@@ -620,7 +626,9 @@ function loadServerConfig() {
   api('config').then(cfg => {
     serverConfig=cfg;
     if(cfg.session_timeout) sessionTimeout=cfg.session_timeout;
+    if(cfg.isolate_storage) storagePrefix = location.pathname.replace(/[^/]*$/, '');
     renderServerConnections();
+    renderSaved();
     // Try to restore sessions from page reload
     if(!tryRestoreSessions()) {
       doAutoConnect();
