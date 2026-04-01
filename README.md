@@ -248,7 +248,8 @@ server {
 # Create a dedicated user
 useradd -r -s /bin/false websh
 
-cp server.py /opt/websh/
+mkdir -p /opt/websh
+cp server.py index.html websh.js /opt/websh/
 cp websh.service /etc/systemd/system/
 systemctl enable --now websh
 ```
