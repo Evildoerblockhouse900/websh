@@ -498,7 +498,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(n) if n else b""
 
     def _path(self):
-        return self.path.split("?")[0].rstrip("/")
+        p = self.path.split("?")[0].rstrip("/")
+        return p or "/"
 
     # ── Routes ──
 
