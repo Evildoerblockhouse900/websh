@@ -498,7 +498,7 @@ function targetPane() {
 
 // ── UI ──────────────────────────────────────────────────────────────
 function setTitle(label) {
-  document.title = label ? label + ' \u2014 websh' : 'websh \u2014 Lightweight web terminal';
+  document.title = label ? label + ' \u2014 websh' : 'websh \u2014 Lightweight but powerful web terminal';
 }
 
 
