@@ -12,6 +12,8 @@ Environment variables:
     SESSION_TIMEOUT   — seconds of inactivity before cleanup (default: 300)
     MAX_SESSIONS      — max concurrent SSH sessions (default: 10)
     WEBSH_CONFIG      — path to websh.json config file (optional)
+    TRUSTED_PROXIES   — comma-separated IPs to trust X-Forwarded-For from (default: 127.0.0.1)
+    MAX_BG_SESSIONS   — max background SSH sessions for file transfer (default: 10)
 
 API endpoints:
     POST /api/connect     — start SSH session
@@ -58,6 +60,14 @@ PORT = _int_env("PORT", "8765")
 HOST = os.environ.get("HOST", "127.0.0.1")
 SESSION_TIMEOUT = _int_env("SESSION_TIMEOUT", "300")
 MAX_SESSIONS = _int_env("MAX_SESSIONS", "10")
+MAX_BG_SESSIONS = _int_env("MAX_BG_SESSIONS", "10")
+
+# Trusted proxies (comma-separated IPs) whose X-Forwarded-For header is trusted.
+# Only requests from these IPs will have their X-Forwarded-For used for rate limiting.
+_TRUSTED_PROXIES = set(
+    p.strip() for p in os.environ.get("TRUSTED_PROXIES", "127.0.0.1").split(",")
+    if p.strip()
+)
 
 # Limits
 MAX_PORT = 65535
@@ -89,6 +99,14 @@ RATE_LIMIT_MAX = 10       # max connect attempts per IP per window
 
 # Session ID format
 _UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+
+# Static file serving (Python-only mode, without PHP proxy)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATIC_FILES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/index.html": ("index.html", "text/html; charset=utf-8"),
+    "/websh.js": ("websh.js", "application/javascript; charset=utf-8"),
+}
 
 
 def _log(level, msg):
@@ -216,7 +234,7 @@ class SSHSession(object):
     """Manages a single SSH connection via PTY subprocess."""
 
     def __init__(self, session_id, host, port, username, password, cols, rows,
-                 key=None, ssh_options=None):
+                 key=None, ssh_options=None, is_background=False):
         self.id = session_id
         self.master_fd = None
         self.pid = None
@@ -224,8 +242,10 @@ class SSHSession(object):
         self.buf_lock = Lock()
         self.alive = True
         self.last_activity = time.time()
+        self.is_background = is_background
         self._password = password
         self._password_sent = False
+        self._pw_buf = b""
         self._key_file = None
         self._ssh_options = ssh_options or {}
 
@@ -313,9 +333,12 @@ class SSHSession(object):
                     if not data:
                         break
 
-                    # Auto-type password on prompt
+                    # Auto-type password on prompt (accumulate to handle split reads)
                     if self._password and not self._password_sent:
-                        text = data.decode("latin-1", errors="replace").lower()
+                        self._pw_buf += data
+                        if len(self._pw_buf) > 256:
+                            self._pw_buf = self._pw_buf[-256:]
+                        text = self._pw_buf.decode("latin-1", errors="replace").lower()
                         if any(p in text for p in PASSWORD_PROMPTS):
                             time.sleep(0.1)
                             try:
@@ -325,6 +348,7 @@ class SSHSession(object):
                                 break
                             self._password_sent = True
                             self._password = None
+                            self._pw_buf = b""
 
                     with self.buf_lock:
                         self.output_buf += data
@@ -389,13 +413,6 @@ class SSHSession(object):
         self._set_winsize(cols, rows)
 
     def close(self):
-        # Clean up upload temp files before killing the session
-        try:
-            os.write(self.master_fd,
-                     b"\x03\nrm -f *.websh.tmp 2>/dev/null\n")
-            time.sleep(0.2)
-        except Exception:
-            pass
         self.alive = False
         try:
             os.close(self.master_fd)
@@ -432,13 +449,20 @@ class SSHSession(object):
 
 
 def cleanup():
-    """Remove timed-out sessions."""
+    """Remove timed-out sessions and stale rate limit entries."""
     with sessions_lock:
         expired = [sid for sid, s in sessions.items() if s.is_expired()]
         for sid in expired:
             _log("INFO", "session {} expired, cleaning up".format(sid))
             sessions[sid].close()
             del sessions[sid]
+    # Prune stale rate limit entries to prevent unbounded memory growth
+    cutoff = time.time() - RATE_LIMIT_WINDOW
+    with _rate_lock:
+        stale = [ip for ip, times in _rate_limits.items()
+                 if not any(t > cutoff for t in times)]
+        for ip in stale:
+            del _rate_limits[ip]
 
 
 def _cleanup_loop():
@@ -476,28 +500,58 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── Routes ──
 
-    def do_POST(self):
-        cleanup()
+    def _resolve_action(self):
+        """Extract API action from /api/<action> or api.php?action=<action>."""
         p = self._path()
-        if p == "/api/connect":
+        if p.startswith("/api/"):
+            return p[5:]
+        if p == "/api.php" or p.endswith("/api.php"):
+            params = urllib.parse.parse_qs(
+                urllib.parse.urlparse(self.path).query)
+            return params.get("action", [""])[0]
+        return ""
+
+    def _serve_static(self, filename, content_type):
+        """Serve a static file from the script directory."""
+        filepath = os.path.join(_SCRIPT_DIR, filename)
+        if not os.path.isfile(filepath):
+            self.send_response(404)
+            self.end_headers()
+            return
+        with open(filepath, "rb") as f:
+            data = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_POST(self):
+        action = self._resolve_action()
+        if action == "connect":
             self._connect()
-        elif p == "/api/input":
+        elif action == "input":
             self._input()
-        elif p == "/api/resize":
+        elif action == "resize":
             self._resize()
-        elif p == "/api/disconnect":
+        elif action == "disconnect":
             self._disconnect()
         else:
             self._json({"error": "not found"}, 404)
 
     def do_GET(self):
-        cleanup()
         p = self._path()
-        if p == "/api/output":
+        static = _STATIC_FILES.get(p)
+        if static:
+            self._serve_static(*static)
+            return
+        action = self._resolve_action()
+        if action == "output":
             self._output()
-        elif p == "/api/config":
+        elif action == "config":
             self._json(config_public())
-        elif p == "/api/ping":
+        elif action == "ping":
             self._json({"ok": True, "version": __version__})
         else:
             self._json({"error": "not found"}, 404)
@@ -505,8 +559,12 @@ class Handler(BaseHTTPRequestHandler):
     # ── Handlers ──
 
     def _client_ip(self):
-        return self.headers.get("X-Forwarded-For", "").split(",")[0].strip() \
-               or self.client_address[0]
+        peer = self.client_address[0]
+        if peer in _TRUSTED_PROXIES:
+            xff = self.headers.get("X-Forwarded-For", "")
+            if xff:
+                return xff.split(",")[0].strip()
+        return peer
 
     def _valid_sid(self, sid):
         return bool(sid and _UUID_RE.match(sid))
@@ -527,6 +585,7 @@ class Handler(BaseHTTPRequestHandler):
 
         cols = clamp(body.get("cols"), MIN_COLS, MAX_COLS, 80)
         rows = clamp(body.get("rows"), MIN_ROWS, MAX_ROWS, 24)
+        is_bg = bool(body.get("background", False))
 
         # Resolve credentials: by config connection name, or from request body
         conn_name = body.get("connection", "").strip()
@@ -563,11 +622,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "connections to this host are not allowed"}, 403)
             return
 
-        # Check session limit
+        # Check session limit (foreground and background counted separately)
         with sessions_lock:
-            if len(sessions) >= MAX_SESSIONS:
-                self._json({"error": "too many active sessions"}, 429)
-                return
+            if is_bg:
+                count = sum(1 for s in sessions.values() if s.is_background)
+                if count >= MAX_BG_SESSIONS:
+                    self._json({"error": "too many background sessions"}, 429)
+                    return
+            else:
+                count = sum(1 for s in sessions.values()
+                            if not s.is_background)
+                if count >= MAX_SESSIONS:
+                    self._json({"error": "too many active sessions"}, 429)
+                    return
 
         sid = str(uuid.uuid4())
         session = None
@@ -582,6 +649,7 @@ class Handler(BaseHTTPRequestHandler):
                 rows=rows,
                 key=key,
                 ssh_options=ssh_options,
+                is_background=is_bg,
             )
             with sessions_lock:
                 sessions[sid] = session
