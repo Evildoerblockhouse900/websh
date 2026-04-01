@@ -193,6 +193,7 @@ function splitPane(id, dir) {
     connectingFor = np.id;
     showOverlay();
     $('btnCancel').classList.remove('h');
+    renderSaved();
   }
 }
 
