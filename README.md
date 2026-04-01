@@ -60,6 +60,18 @@ On shared hosting where you can't run a long-lived process, an optional PHP prox
 - Rate limiting on connection attempts
 - Session timeout, auto-cleanup, terminal resize
 
+## Quick start (your machine)
+
+```bash
+git clone https://github.com/dolonet/websh.git
+cd websh
+HOST=0.0.0.0 python3 server.py
+```
+
+Open http://localhost:8765 — that's it. No pip install, no npm, no build step.
+
+Requires Python 3.5+ and `ssh` in your PATH.
+
 ## Quick start (shared hosting)
 
 **No SSH access required.** Upload files via FTP, open in browser.
